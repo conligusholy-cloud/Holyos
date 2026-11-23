@@ -125,6 +125,9 @@
       <button class="module-tab" data-tab="chyby">Chyby<span id="chyby-pocet"></span></button>
       <button class="module-tab" data-tab="zlocin">Zločin</button>
       <button class="module-tab" data-tab="multi">Spojené účty<span id="multi-pocet"></span></button>
+      <button class="module-tab" data-tab="mailseznam">✉ Seznam kontaktů</button>
+      <button class="module-tab" data-tab="mailjednorazove">✉ Jednorázové e-maily</button>
+      <button class="module-tab" data-tab="mailpravidelne">✉ Pravidelné e-maily</button>
     </div>
 
     <div class="content">
@@ -289,6 +292,9 @@
           <div id="limit-box"></div>
         </div>
       </div>
+      <div class="module-panel" id="panel-mailseznam"><div id="gm-list"></div></div>
+      <div class="module-panel" id="panel-mailjednorazove"><div id="gm-oneoff"></div></div>
+      <div class="module-panel" id="panel-mailpravidelne"><div id="gm-recurring"></div></div>
     </div>
   </div>
 
@@ -296,6 +302,7 @@
 
   <script src="/js/column-filters.js?v=8"></script>
   <script src="js/sidebar.js?v=2026-11-05-1"></script>
+  <script src="mailing.js?v=1"></script>
   <script>
   (function () {
     // Ve Velíně (mobil) běží stránka ve WebView — užší odsazení a dvousloupcové
@@ -1913,7 +1920,10 @@
 
     var LOADERY = { zlocin: loadZlocin, stats: loadStats, players: loadPlayers, orders: loadOrders,
       prices: loadPrices, nastaveni: loadNastaveni, nahlasene: function () { loadModerace(); loadNahlasene(); }, chyby: loadChyby, multi: loadMulti,
-      drazby: loadDrazby };
+      drazby: loadDrazby,
+      mailseznam: function () { window.GMail && window.GMail.open('list'); },
+      mailjednorazove: function () { window.GMail && window.GMail.open('oneoff'); },
+      mailpravidelne: function () { window.GMail && window.GMail.open('recurring'); } };
     var AKTIVNI = 'stats';
     [].forEach.call(document.querySelectorAll('.module-tab'), function (t) {
       t.onclick = function () {

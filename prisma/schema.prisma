@@ -9008,3 +9008,78 @@ model GameZlocinZprava {
   @@index([zlocin_id])
   @@map("game_zlocin_zpravy")
 }
+
+// Laundromat Tycoon — e-mailing: samostatný seznam kontaktů (importuje se z jiného systému),
+// kampaně (jednorázové / pravidelné / sekvence) a evidence odeslaných zpráv (proti dvojímu odeslání).
+model GameMailContact {
+  id          Int      @id @default(autoincrement())
+  email       String   @db.VarChar(200)
+  email_lower String   @unique @db.VarChar(200)
+  first_name  String?  @db.VarChar(100)
+  last_name   String?  @db.VarChar(100)
+  company     String?  @db.VarChar(200)
+  phone       String?  @db.VarChar(60)
+  lang        String?  @db.VarChar(5)
+  // Štítky oddělené čárkou (segmentace kampaní).
+  tags        String?  @db.VarChar(300)
+  // Všechny ostatní sloupce z importu (název sloupce → hodnota); lze je vkládat do textu jako {{sloupec}}.
+  extra       Json?
+  // active | unsubscribed | bounced
+  status      String   @default("active") @db.VarChar(16)
+  source      String?  @db.VarChar(80)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([status])
+  @@map("game_mail_contacts")
+}
+
+model GameMailCampaign {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(160)
+  // oneoff | recurring | sequence
+  kind         String    @db.VarChar(12)
+  subject      String    @db.VarChar(300)
+  body         String    @default("") @db.Text
+  link         String?   @db.VarChar(500)
+  link_label   String?   @db.VarChar(80)
+  // sequence: [{ day, subject, body }]
+  steps        Json?
+  from_address String?   @db.VarChar(200)
+  from_name    String?   @db.VarChar(100)
+  reply_to     String?   @db.VarChar(200)
+  lang         String?   @db.VarChar(5)
+  // { contacts: true, tag: '', players: false, player_lang: '' }
+  audience     Json?
+  // oneoff: { at: ISO }; recurring: { freq: daily|weekly|monthly, dow, dom, hour }
+  schedule     Json?
+  // draft | scheduled | sending | sent | active | paused
+  status       String    @default("draft") @db.VarChar(12)
+  next_run_at  DateTime?
+  last_run_at  DateTime?
+  started_at   DateTime?
+  sent_count   Int       @default(0)
+  last_error   String?   @db.Text
+  created_by   String?   @db.VarChar(120)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  @@index([status, next_run_at])
+  @@map("game_mail_campaigns")
+}
+
+model GameMailSend {
+  id          Int      @id @default(autoincrement())
+  campaign_id Int
+  email_lower String   @db.VarChar(200)
+  // once | YYYY-MM-DD (pravidelná kampaň) | s<krok> (sekvence)
+  run_key     String   @db.VarChar(40)
+  // sent | error
+  status      String   @db.VarChar(12)
+  error       String?  @db.VarChar(300)
+  sent_at     DateTime @default(now())
+
+  @@unique([campaign_id, email_lower, run_key])
+  @@index([campaign_id])
+  @@map("game_mail_sends")
+}

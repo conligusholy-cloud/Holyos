@@ -918,6 +918,7 @@ app.use('/api/game', require('./routes/game-account.routes')); // účty hráč�
 app.use('/api/game', require('./routes/game-stripe.routes'));  // nákup karet přes Stripe
 app.use('/api/game', require('./routes/game-trade.routes'));   // burza — obchody mezi hráči
 app.use('/api/game', require('./routes/game-zlocin.routes'));  // noviny o zločinu, hlasování poroty, odvolání
+app.use('/api/game-admin/mailing', require('./routes/game-mailing.routes')); // e-mailing hry (kontakty + kampaně) — musí být před game-admin
 app.use('/api/game-admin', require('./routes/game-admin.routes')); // administrace hry (sekce Soukromé)
 app.use('/api/leasing', require('./routes/leasing.routes')); // Leasing/financující společnosti (financování prádlomatu)
 if (VYBERY_ENABLED) app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry (vypnuto, zapíná VYBERY_ENABLED=1) — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
@@ -1653,6 +1654,11 @@ server.listen(PORT, async () => {
     lossEmailWorker.start();
   } catch (err) {
     console.error('[app] loss-email-worker nelze spustit:', err.message);
+  }
+  try {
+    require('./services/game/mailing').start(); // e-mailing Laundromat Tycoon: naplánované, pravidelné a sekvenční kampaně
+  } catch (err) {
+    console.error('[app] game-mailing worker nelze spustit:', err.message);
   }
   try {
     const replyIngestWorker = require('./services/compounder/reply-ingest-worker');
