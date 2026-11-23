@@ -74,8 +74,8 @@
   // ── Vykreslení ──
   var EMPTY = 'Zatím žádné řádky. Přidej první tlačítkem ＋ Přidat řádek — řádek je cokoli, co se mezi pozice dělí (např. cena prádlomatu, provize, servis…).';
   function headHtml() {
-    var h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cr">Cena <span class="dph">EUR · bez DPH</span><span class="sub">z čeho se počítá</span></th><th class="cm">Volné prostředky na rozdělení <span class="dph">EUR · bez DPH</span><span class="sub">% z ceny&nbsp;&nbsp;|&nbsp;&nbsp;částka</span></th><th class="cf">Frekvence</th>';
-    D.cols.forEach(function (c) { h += '<th class="cp"><div class="ch"><input class="hin" data-c="' + c.id + '" value="' + esc(c.name) + '" maxlength="60" title="Název pozice"><button type="button" class="x" data-dc="' + c.id + '" title="Odebrat pozici">✕</button></div></th>'; });
+    var h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cr">Cena<span class="sub"><span class="dph">EUR · bez DPH</span> z čeho se počítá</span></th><th class="cm">Volné prostředky na rozdělení<span class="sub"><span class="dph">EUR · bez DPH</span> % z ceny | částka</span></th><th class="cf">Frekvence</th>';
+    D.cols.forEach(function (c) { h += '<th class="cp"><button type="button" class="x" data-dc="' + c.id + '" title="Odebrat pozici">✕</button><input class="hin" data-c="' + c.id + '" value="' + esc(c.name) + '" maxlength="60" title="' + esc(c.name) + ' (klikni a přejmenuj)"></th>'; });
     return h + '<th class="cs">Součet</th><th class="ca"></th></tr></thead>';
   }
   function rowHtml(r, i) {
