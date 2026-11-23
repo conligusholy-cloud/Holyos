@@ -72,18 +72,40 @@
   }
 
   // ── Vykreslení ──
-  function render() {
-    var t = $('#fx'), h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cr">Cena <span class="dph">EUR · bez DPH</span><span class="sub">z čeho se počítá</span></th><th class="cm">Volné prostředky na rozdělení <span class="dph">EUR · bez DPH</span><span class="sub">% z ceny&nbsp;&nbsp;|&nbsp;&nbsp;částka</span></th><th class="cf">Frekvence</th>';
+  var EMPTY = 'Zatím žádné řádky. Přidej první tlačítkem ＋ Přidat řádek — řádek je cokoli, co se mezi pozice dělí (např. cena prádlomatu, provize, servis…).';
+  function headHtml() {
+    var h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cr">Cena <span class="dph">EUR · bez DPH</span><span class="sub">z čeho se počítá</span></th><th class="cm">Volné prostředky na rozdělení <span class="dph">EUR · bez DPH</span><span class="sub">% z ceny&nbsp;&nbsp;|&nbsp;&nbsp;částka</span></th><th class="cf">Frekvence</th>';
     D.cols.forEach(function (c) { h += '<th class="cp"><div class="ch"><input class="hin" data-c="' + c.id + '" value="' + esc(c.name) + '" maxlength="60" title="Název pozice"><button type="button" class="x" data-dc="' + c.id + '" title="Odebrat pozici">✕</button></div></th>'; });
-    h += '<th class="cs">Součet</th><th class="ca"></th></tr></thead><tbody>';
-    D.rows.forEach(function (r, i) {
-      h += '<tr data-r="' + r.id + '"><td class="c0">' + (i + 1) + '</td><td class="cn"><input class="rin" data-f="name" value="' + esc(r.name) + '" maxlength="200" placeholder="např. Prodej prádlomatu"></td><td class="cr"><span class="pc"><input class="ain" data-f="price" value="' + esc(fmtAmt(r.price)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Cena bez DPH, ze které se volné prostředky vypočítávají (EUR)"><i>€</i></span></td><td class="cm"><div class="sp"><span class="pc"><input class="ain" data-f="pct" value="' + esc(fmt(showPct(r))) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Kolik % z ceny jsou volné prostředky na rozdělení"><i>%</i></span><span class="pc"><input class="ain" data-f="amt" value="' + esc(fmtAmt(r.amt)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Volné prostředky na rozdělení v EUR, bez DPH (editovatelné)"><i>€</i></span></div></td><td class="cf">' + freqSel(r.freq) + '</td>';
-      D.cols.forEach(function (c) { var x = r.v && r.v[c.id]; var ev = eurOf(r, x); h += '<td class="cp"><span class="pc"><input class="vin" data-c="' + c.id + '" value="' + esc(fmt(typeof x === 'number' ? x : null)) + '" inputmode="decimal" autocomplete="off"' + (poolOf(r) ? '' : ' disabled title="Nejdřív zadej cenu a volné prostředky na rozdělení"') + '><i>%</i></span><div class="eu" data-c="' + c.id + '">' + (ev == null ? '' : esc(fmtAmt(ev)) + ' €') + '</div></td>'; });
-      h += '<td class="cs">' + sumChip(r) + '</td><td class="ca"><button type="button" class="ib" data-eq="' + r.id + '" title="Rozdělit rovným dílem">⚖</button><button type="button" class="ib" data-up="' + r.id + '" title="Posunout nahoru">↑</button><button type="button" class="ib" data-dn="' + r.id + '" title="Posunout dolů">↓</button><button type="button" class="ib" data-dr="' + r.id + '" title="Smazat řádek">🗑</button></td></tr>';
-    });
-    if (!D.rows.length) h += '<tr><td colspan="' + (D.cols.length + 7) + '" class="empty">Zatím žádné řádky. Přidej první tlačítkem <b>＋ Přidat řádek</b> — řádek je cokoli, co se mezi pozice dělí (např. cena prádlomatu, provize, servis…).</td></tr>';
-    h += '</tbody>';
-    t.innerHTML = h;
+    return h + '<th class="cs">Součet</th><th class="ca"></th></tr></thead>';
+  }
+  function rowHtml(r, i) {
+    var h = '<tr data-r="' + r.id + '"><td class="c0">' + (i + 1) + '</td><td class="cn"><input class="rin" data-f="name" value="' + esc(r.name) + '" maxlength="200" placeholder="např. Prodej prádlomatu"></td><td class="cr"><span class="pc"><input class="ain" data-f="price" value="' + esc(fmtAmt(r.price)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Cena bez DPH, ze které se volné prostředky vypočítávají (EUR)"><i>€</i></span></td><td class="cm"><div class="sp"><span class="pc"><input class="ain" data-f="pct" value="' + esc(fmt(showPct(r))) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Kolik % z ceny jsou volné prostředky na rozdělení"><i>%</i></span><span class="pc"><input class="ain" data-f="amt" value="' + esc(fmtAmt(r.amt)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Volné prostředky na rozdělení v EUR, bez DPH (editovatelné)"><i>€</i></span></div></td><td class="cf">' + freqSel(r.freq) + '</td>';
+    D.cols.forEach(function (c) { var x = r.v && r.v[c.id]; var ev = eurOf(r, x); h += '<td class="cp"><span class="pc"><input class="vin" data-c="' + c.id + '" value="' + esc(fmt(typeof x === 'number' ? x : null)) + '" inputmode="decimal" autocomplete="off"' + (poolOf(r) ? '' : ' disabled title="Nejdřív zadej cenu a volné prostředky na rozdělení"') + '><i>%</i></span><div class="eu" data-c="' + c.id + '">' + (ev == null ? '' : esc(fmtAmt(ev)) + ' €') + '</div></td>'; });
+    return h + '<td class="cs">' + sumChip(r) + '</td><td class="ca"><button type="button" class="ib" data-eq="' + r.id + '" title="Rozdělit rovným dílem">⚖</button><button type="button" class="ib" data-up="' + r.id + '" title="Posunout nahoru">↑</button><button type="button" class="ib" data-dn="' + r.id + '" title="Posunout dolů">↓</button><button type="button" class="ib" data-dr="' + r.id + '" title="Smazat řádek">🗑</button></td></tr>';
+  }
+  // Standardní filtry a řazení tabulek (sdílená komponenta ColFilters z HolyOS): řádek filtrů pod hlavičkou, šipky ↑↓, počítadlo řádků
+  var T = null, colsSig = '';
+  var FREQ_LABEL = {}; FREQ.forEach(function (f) { FREQ_LABEL[f[0]] = f[1]; });
+  var numOrNull = function (x) { return typeof x === 'number' ? x : null; };
+  function cfColumns() {
+    var cols = [null,
+      { key: 'name', label: 'Co se dělí', type: 'text', ph: 'Řádek…', get: function (r) { return r.name || ''; } },
+      { key: 'price', label: 'Cena', type: 'num', ph: '€', get: function (r) { return numOrNull(r.price); } },
+      { key: 'amt', label: 'Volné prostředky', type: 'num', ph: '€', get: function (r) { return numOrNull(r.amt); } },
+      { key: 'freq', label: 'Frekvence', type: 'text', enum: true, ph: 'Vyber…', get: function (r) { return r.freq ? FREQ_LABEL[r.freq] : 'Neurčeno'; } }];
+    D.cols.forEach(function (c) { cols.push({ key: 'v_' + c.id, label: c.name || 'Pozice', type: 'num', ph: '%', get: function (r) { return r.v && typeof r.v[c.id] === 'number' ? r.v[c.id] : null; } }); });
+    cols.push({ key: 'sum', label: 'Součet', type: 'num', ph: '%', get: function (r) { return rowSum(r); } }, null);
+    return cols;
+  }
+  function render() {
+    var t = $('#fx');
+    if (!window.ColFilters) { t.innerHTML = headHtml() + '<tbody>' + (D.rows.length ? D.rows.map(rowHtml).join('') : '<tr><td colspan="' + (D.cols.length + 7) + '" class="empty">' + esc(EMPTY) + '</td></tr>') + '</tbody>'; return; }
+    var sig = D.cols.map(function (c) { return c.id; }).join(',');
+    if (!T || sig !== colsSig) {
+      t.innerHTML = headHtml() + '<tbody></tbody>'; colsSig = sig;
+      T = window.ColFilters.table({ table: '#fx', columns: cfColumns(), renderRow: rowHtml, limit: 500, noun: 'řádků', emptyText: EMPTY });
+    }
+    T.setRows(D.rows);
   }
 
   // ── Události ──

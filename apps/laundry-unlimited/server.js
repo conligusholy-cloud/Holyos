@@ -891,6 +891,19 @@ app.post('/admin/api/users/:id(\\d+)/delete', requireAdmin, express.json({ limit
 // ── Modelace business modelu: plátno s myšlenkovou mapou ────────────────────
 let MODEL_JS = null;
 // ── Rozdělení financí ──
+// Standardní filtry tabulek (ColFilters) bereme z HolyOS, ať se tabulka ovládá stejně jako ostatní; 10 min v paměti
+let _cfj = { at: 0, body: '' };
+app.get('/admin/column-filters.js', requireAdmin, async (req, res) => {
+  res.type('application/javascript');
+  if (_cfj.body && Date.now() - _cfj.at < 10 * 60e3) return res.set('Cache-Control', 'private, max-age=600').send(_cfj.body);
+  try {
+    const r = await fetch(HOLYOS_URL + '/js/column-filters.js', { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const t = await r.text(); if (!/ColFilters/.test(t)) throw new Error('neočekávaný obsah');
+    _cfj = { at: Date.now(), body: t };
+    res.set('Cache-Control', 'private, max-age=600').send(t);
+  } catch (e) { res.set('Cache-Control', 'no-store').send('/* filtry z HolyOS se nepodařilo načíst: ' + String(e.message).replace(/[*]\//g, '') + ' */'); }
+});
 let FIN_JS = null;
 app.get('/admin/finance.js', requireAdmin, (req, res) => {
   if (!FIN_JS) FIN_JS = fs.readFileSync(path.join(__dirname, 'finance-client.js'), 'utf8');
@@ -928,6 +941,7 @@ const FIN_CSS = `
 .fxbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:16px 0 12px}
 .fxbar button{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 13px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:auto}.fxbar button:hover{border-color:var(--cy)}
 #fx-st{font-size:12.5px;color:#86efac;margin-left:6px}
+:root{--border:var(--line);--text2:var(--mut);--bg:#07111f;--surface2:#0b1630}.fxw .cf-info{padding:10px 14px 4px;margin:0!important}#fx .cf-filter-row th{position:static;background:#0b1630;padding:4px 4px 8px}#fx .cf-sort{width:auto}
 .fxw{overflow:auto;border:1px solid var(--line);border-radius:14px;background:rgba(8,15,30,.6);max-width:100%}
 #fx{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed}
 #fx th{position:sticky;top:0;background:#0b1630;z-index:2;text-align:left;padding:10px 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}
@@ -936,11 +950,11 @@ const FIN_CSS = `
 #fx .c0{width:34px;color:var(--mut);text-align:center}#fx .cn{width:17%}#fx .cr{width:150px}#fx .cm{width:250px}#fx .sp{display:flex;gap:4px}#fx .sp .pc{flex:1;min-width:0}#fx .sub{display:block;margin-top:2px;font-size:10.5px;letter-spacing:.03em;text-transform:none;color:#6f84a6;font-weight:500}#fx .cf{width:132px}#fx .cp{min-width:0}#fx .cs{width:138px;white-space:nowrap}#fx .ca{width:104px;white-space:nowrap;text-align:right}
 #fx .ain{text-align:right;font-variant-numeric:tabular-nums;padding-right:26px}#fx .dph{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;background:rgba(251,191,36,.16);color:#fcd34d;font-size:10.5px;letter-spacing:.04em;vertical-align:middle}
 #fx select.fin{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 6px;width:100%;box-sizing:border-box;cursor:pointer}#fx select.fin:hover{border-color:var(--line)}#fx select.fin:focus{outline:none;border-color:var(--cy)}#fx select.fin option{background:#0b1630}
-#fx input{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 9px;width:100%;box-sizing:border-box}
-#fx input:hover{border-color:var(--line)}#fx input:focus{outline:none;border-color:var(--cy);background:#0a1830}
+#fx .rin,#fx .vin,#fx .ain,#fx .hin{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 9px;width:100%;box-sizing:border-box}
+#fx .rin:hover,#fx .vin:hover,#fx .ain:hover,#fx .hin:hover{border-color:var(--line)}#fx .rin:focus,#fx .vin:focus,#fx .ain:focus,#fx .hin:focus{outline:none;border-color:var(--cy);background:#0a1830}
 #fx .hin{font-weight:700;text-transform:none;letter-spacing:0;color:#eaf6ff;font-size:13.5px;background:rgba(34,230,255,.07)}
-#fx .ch{display:flex;align-items:center;gap:4px}#fx .x{background:none;border:0;color:#6f84a6;cursor:pointer;font-size:13px;padding:2px 4px;width:auto}#fx .x:hover{color:#fca5a5}
-#fx .eu{text-align:right;font-size:11.5px;color:#7f93b5;padding:2px 26px 0 0;min-height:15px;font-variant-numeric:tabular-nums}#fx input.cl{border-color:#f87171!important;background:rgba(248,113,113,.16)!important}#fx input:disabled{opacity:.45;cursor:not-allowed}#fx .pc{position:relative;display:block}#fx .pc .vin{text-align:right;padding-right:26px;font-variant-numeric:tabular-nums}#fx .pc i{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--mut);font-style:normal;font-size:13px;pointer-events:none}
+#fx .ch{display:inline-flex;align-items:center;gap:4px;width:calc(100% - 34px);vertical-align:middle}#fx .x{background:none;border:0;color:#6f84a6;cursor:pointer;font-size:13px;padding:2px 4px;width:auto}#fx .x:hover{color:#fca5a5}
+#fx .eu{text-align:right;font-size:11.5px;color:#7f93b5;padding:2px 26px 0 0;min-height:15px;font-variant-numeric:tabular-nums}#fx input.cl{border-color:#f87171!important;background:rgba(248,113,113,.16)!important}#fx .vin:disabled{opacity:.45;cursor:not-allowed}#fx .pc{position:relative;display:block}#fx .pc .vin{text-align:right;padding-right:26px;font-variant-numeric:tabular-nums}#fx .pc i{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--mut);font-style:normal;font-size:13px;pointer-events:none}
 .fxc{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}.fxc.ok{background:rgba(34,197,94,.18);color:#86efac}.fxc.w{background:rgba(251,191,36,.16);color:#fcd34d}.fxc.bad{background:rgba(248,113,113,.2);color:#fca5a5}.fxc.n{color:var(--mut)}
 #fx .ib{background:none;border:1px solid transparent;border-radius:7px;color:#9fb4d6;cursor:pointer;font-size:13px;padding:3px 4px;width:auto}#fx .ib:hover{border-color:var(--line);color:#fff}
 #fx .empty{text-align:center;color:var(--mut);padding:34px 14px;line-height:1.7}
@@ -952,7 +966,7 @@ app.get('/admin/finance', requireAdmin, (req, res) => {
 <p class="mut" style="margin:4px 0 0;max-width:820px">Řádek = cokoli, co se dělí (např. cena prádlomatu, provize, servis). Sloupec = pozice, mezi které se dělí. Nejdřív zadej cenu a kolik z ní jsou volné prostředky na rozdělení (např. 10 %). Do pozic pak napiš podíl v % z ceny — dohromady maximálně tolik, kolik je k rozdělení; pod procentem se ukáže částka v €. Vše se ukládá samo.</p>
 <div class="fxbar"><button id="fx-addrow" type="button">＋ Přidat řádek</button><button id="fx-addcol" type="button">＋ Přidat pozici</button><span id="fx-st"></span></div>
 <div class="fxw"><table id="fx"></table></div></div>
-<script src="/admin/finance.js"></script></body></html>`);
+<script src="/admin/column-filters.js"></script><script src="/admin/finance.js"></script></body></html>`);
 });
 app.get('/admin/model.js', requireAdmin, (req, res) => {
   if (!MODEL_JS) MODEL_JS = fs.readFileSync(path.join(__dirname, 'model-client.js'), 'utf8');
