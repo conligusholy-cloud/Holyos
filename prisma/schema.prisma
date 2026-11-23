@@ -8074,6 +8074,82 @@ model GameSpotClaim {
   @@map("game_spot_claims")
 }
 
+// ─── Unie prádlomatů: pozdní hra ─────────────────────────────────────────────
+// Až má hráč stovky prádlomatů, přestanou být peníze vzácné a hra se změní na
+// hromadění čísel. Novou vzácností jsou území a ostatní hráči: master partner
+// drží oblast, operátor v ní shání a servisuje místa, provozovatel tam staví.
+// Území = oblast (area_key), ne země — v Česku hraje většina hráčů a kdo by
+// získal celou zemi, vyhrál by hru.
+
+// Území pod jedním masterem. Jedna oblast = nejvýš jeden master.
+model GameTerritory {
+  id         Int      @id @default(autoincrement())
+  area_key   String   @unique @db.VarChar(80)
+  master_id  Int
+  master_nick String  @db.VarChar(24)
+
+  // Poplatek, který master v území vybírá, v procentech základu (pásmo 50–150).
+  // Vysoký = víc peněz teď, ale roste nespokojenost a klesá práh pro výzvu.
+  poplatek_pct Int    @default(100)
+  // Nespokojenost území 0–100. Počítá se z poplatku, neukládá se natvrdo —
+  // tohle je poslední spočítaná hodnota, ať ji hráč vidí i bez přepočtu.
+  nespokojenost Int   @default(0)
+
+  // Rozvojový závazek: kolik prádlomatů v území za herní rok přibude.
+  // zavazek_start je stav při převzetí, od kterého se přírůstek měří.
+  zavazek      Int      @default(0)
+  zavazek_od   DateTime @default(now())
+  zavazek_start Int     @default(0)
+
+  // Licence se platí opakovaně — nerozvíjené území krvácí. licence_do říká,
+  // do kdy je zaplacená; dokud je v minulosti, dluh roste.
+  licence      Int      @default(0)
+  licence_do   DateTime @default(now())
+
+  // Do kdy je vyúčtovaný servisní tok (od toho se počítá, co se připíše).
+  servis_do    DateTime @default(now())
+
+  // Nabídka operátorské licence: za kolik ji master v území prodává a jaký
+  // podíl ze servisu k ní patří. null = zrovna nenabízí.
+  operator_cena  Int?
+  operator_podil Int      @default(60)
+
+  // Výzva přeplacením — stejná mechanika jako u míst: vyzyvatel nabídne víc
+  // a běží lhůta, po kterou území ještě vydělává dosavadnímu masterovi.
+  vyzyvatel_id   Int?
+  vyzyvatel_nick String?  @db.VarChar(24)
+  vyzyvatel_cena Int?
+  vyzva_do       DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([master_id])
+  @@index([vyzyvatel_id])
+  @@index([vyzva_do])
+  @@map("game_territories")
+}
+
+// Operátorská licence: právo servisovat v jednom území. Prodává ji master.
+model GameOperatorLicence {
+  id         Int      @id @default(autoincrement())
+  area_key   String   @db.VarChar(80)
+  player_id  Int
+  nick       String   @db.VarChar(24)
+  // Co operátor masterovi zaplatil a jaký podíl ze servisu mu za to patří (%).
+  cena       Int      @default(0)
+  podil_pct  Int      @default(60)
+  od         DateTime @default(now())
+  do_kdy     DateTime?
+  zrusena    Boolean  @default(false)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([area_key, player_id])
+  @@index([player_id])
+  @@map("game_operator_licences")
+}
+
 // Ceník hry. Kdyby byl natvrdo v kódu, znamenala by každá změna ceny nasazení.
 // Takhle se mění v administraci a projeví se do minuty.
 model GamePrice {

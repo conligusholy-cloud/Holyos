@@ -58,7 +58,7 @@ function prelozStatickyText() {
   dej('#v-burza > h2', 'hra.burza'); dej('#v-burza > p', 'hra.zal_burza_popis'); dej('#burza-nova', 'hra.zal_nova_nabidka');
   dej('#v-me > h2', 'hra.ja');
   dej('#net-do-vyvoje', 'hra.zal_jak_si_vedu');
-  [['data-net', { moje: 'hra.zal_moje_sit', stroje: 'hra.stroje', mista: 'hra.zal_mista', vyvoj: 'hra.zal_vyvoj', zebricek: 'hra.zal_zebricek' }],
+  [['data-net', { moje: 'hra.zal_moje_sit', stroje: 'hra.stroje', mista: 'hra.zal_mista', vyvoj: 'hra.zal_vyvoj', zebricek: 'hra.zal_zebricek', unie: 'hra.zal_unie' }],
    ['data-stroj', { zisk: 'hra.zisk', trzby: 'hra.trzby', poruchy: 'hra.zal_poruchy', navratnost: 'mapa.navratnost' }],
    ['data-misto', { vse: 'hra.vse', moje: 'hra.moje', volna: 'hra.zal_volna', cizi: 'hra.zal_konkurence' }],
    ['data-zeb', { pradlomaty: 'hra.pradlomaty', zisk: 'hra.zisk', jmeni: 'hra.zal_jmeni', fondy: 'hra.zal_fondy', hvezdy: 'hra.zal_hvezdicky', pozvanky: 'hra.zal_pozvanky', zeme: 'hra.zal_zeme' }]
@@ -4683,6 +4683,16 @@ function spotSheet(sp, areaId) {
           : '')
       + (najemce0 ? '' : '<button class="btn big" id="do-priprava-start" style="width:100%;margin-top:12px">'
           + (pady0.length ? esc(tx('hra.rozsirit_nebo_predelat_plochu')) : esc(tx('hra.pripravit_plochu'))) + '</button>')
+      // Přípojky bez stroje — z pozemku se tím stane prodejné připravené místo.
+      // Zatím jen v uzavřeném testu pozdní hry. (Unie, krok 1)
+      + (ME && ME.unie && !najemce0 && !stoji0
+          ? (claim && claim.pripraveno
+              ? '<div class="kv" style="margin-top:10px"><span>' + esc(tx('hra.pripojky')) + '</span><b class="ok">'
+                + esc(tx('drazba.pripravene_misto')) + '</b></div>'
+              : '<button class="btn sec" id="do-pripojky-zem" style="width:100%;margin-top:8px">'
+                + esc(tx('hra.natahnout_pripojky')) + '</button>'
+                + '<p class="fine">' + esc(tx('hra.pripojky_bez_stroje_vysvetleni')) + '</p>')
+          : '')
       + (pady0.length || najemce0 ? ''
           : tx('hra.p_class_fine_cestu_parkovani_dlazbu'))
       + '</div>'
@@ -4710,6 +4720,25 @@ function spotSheet(sp, areaId) {
     var ps0 = $('do-priprava-start');
     if (ps0) ps0.onclick = function () {
       planEditor(sp, areaId, function () { pripravaSheet(sp, areaId); });
+    };
+    // Přípojky na zem bez stroje — cena se počítá pro FLEX, tedy pro střední
+    // stroj; kdo pak postaví MAX, doplatí rozdíl při stavbě. (Unie, krok 1)
+    var pz0 = $('do-pripojky-zem');
+    if (pz0) pz0.onclick = function () {
+      var cena = connPrice(sp, 'flex');
+      var f = canFinance(cena, null, cena);
+      if (!f.ok) return zedSheet(tx('veta.pripojky_na', { p1: sp.name }), f, cena, function () { return cena; },
+        { typ: 'pripojky', areaId: areaId, spotId: sp.id });
+      pz0.disabled = true; pz0.textContent = esc(tx('hra.natahuji_u2026'));
+      apiJson('/spots/pripravit', { spot_id: sp.id, model_pro: 'flex', pripojky: cena }).then(function (r) {
+        pz0.disabled = false;
+        if (!r.ok) return toast(r.j.error || esc(tx('hra.nepovedlo_se_34')), 'err');
+        CLAIMS[sp.id] = r.j.spot;
+        doFinance(f, { druh: 'pripojky', spotId: sp.id, popis: tx('veta.pripojky_na', { p1: sp.name }) });
+        save(); paint(); drawMap(); syncState(true);
+        toast(esc(tx('hra.misto_je_pripravene_da_se')), 'ok');
+        spotSheet(sp, areaId);
+      }).catch(function () { pz0.disabled = false; toast(esc(tx('hra.server_neodpovida_35')), 'err'); });
     };
     [].forEach.call($('sheet-body').querySelectorAll('[data-pad-detail]'), function (bd) {
       bd.onclick = function () {
@@ -7706,6 +7735,7 @@ function paintHlavicka() {
 function paint() {
   refreshUnits();
   paintHlavicka();
+  unieTab();
   // Hlavička se hýbe pořád, obsah záložky počká, až hráč dopíše.
   if (pisePrave()) return;
   if (!$('v-shop').classList.contains('hidden')) paintShop();
@@ -7794,11 +7824,233 @@ function netZalozka(kam) {
   $('net-mista').classList.toggle('hidden', kam !== 'mista');
   $('net-vyvoj').classList.toggle('hidden', kam !== 'vyvoj');
   $('net-zebricek').classList.toggle('hidden', kam !== 'zebricek');
+  $('net-unie').classList.toggle('hidden', kam !== 'unie');
   if (kam === 'zebricek') { ZEB = null; paintZeb(); }
   else if (kam === 'vyvoj') paintVyvoj();
   else if (kam === 'stroje') paintStroje();
   else if (kam === 'mista') paintMista();
+  else if (kam === 'unie') paintUnie();
   else paintNet();
+}
+
+// ─── Unie prádlomatů ─────────────────────────────────────────────────────────
+// Pozdní hra: velcí hráči si přestanou jen stavět vlastní síť a začnou si
+// navzájem dodávat. Master partner drží území (oblast), operátor v něm shání
+// a připravuje místa a servisuje, provozovatel tam staví. Z každého cizího
+// prádlomatu v území odchází část servisního poplatku masterovi a operátorovi.
+//
+// Záložka se ukazuje jen hráčům v uzavřeném testu (ME.unie) — server to
+// kontroluje znovu u každého požadavku, tohle je jen schování tlačítka.
+var UNIE = null;            // poslední přehled ze serveru
+function unieTab() {
+  var b = $('net-tab-unie'); if (!b) return;
+  b.classList.toggle('hidden', !(ME && ME.unie));
+}
+function paintUnie() {
+  var box = $('unie-body'); if (!box) return;
+  if (!(ME && ME.unie)) { box.innerHTML = '<p class="muted small">' + esc(tx('hra.unie_nedostupna')) + '</p>'; return; }
+  if (!UNIE) box.innerHTML = '<p class="muted small">' + esc(tx('hra.nacitam')) + '</p>';
+  api('/unie/prehled', { method: 'GET' }).then(function (r) {
+    if (!r.ok) { box.innerHTML = '<p class="muted small">' + esc((r.j && r.j.error) || tx('hra.nepovedlo_se_34')) + '</p>'; return; }
+    UNIE = r.j;
+    box.innerHTML = unieHtml(UNIE);
+    bindUnie();
+    // Doručenky (servisní poplatky, výzvy) se mohly právě vytvořit.
+    vyzvedniNasledky();
+  }).catch(function () { box.innerHTML = '<p class="muted small">' + esc(tx('hra.server_neodpovida_35')) + '</p>'; });
+}
+function unieRole(d) {
+  var r = d.role || {};
+  var stav = r.master ? tx('hra.unie_role_master')
+    : (r.operator ? tx('hra.unie_role_operator') : tx('hra.unie_role_provozovatel'));
+  var dal = r.master ? ''
+    : (r.operator
+      ? tx('veta.unie_do_mastera', { p1: cislo1(Math.max(0, r.master_min - r.pradlomatu)) })
+      : tx('veta.unie_do_operatora', { p1: cislo1(Math.max(0, r.operator_min - r.pradlomatu)) }));
+  return '<div class="card"><div class="row"><h3>' + esc(stav) + '</h3><b>' + cislo1(r.pradlomatu || 0) + '</b></div>'
+    + (dal ? '<p class="fine">' + esc(dal) + '</p>' : '')
+    + '<p class="fine">' + esc(tx('hra.unie_role_popis')) + '</p></div>';
+}
+function unieUzemiKarta(u, nast) {
+  var pasmo = '<input type="range" class="unie-pct" data-uzemi="' + esc(u.area_key) + '" min="' + u.poplatek_min
+    + '" max="' + u.poplatek_max + '" step="5" value="' + u.poplatek_pct + '">';
+  var nespBar = '<div class="unie-bar"><i style="width:' + Math.max(2, u.nespokojenost) + '%"></i></div>';
+  var vyzva = u.vyzyvatel_nick
+    ? '<p class="err" style="margin:6px 0 0">' + esc(tx('veta.unie_vyzva_bezi', { p1: u.vyzyvatel_nick, p2: kcFull(u.vyzyvatel_cena || 0) })) + '</p>'
+      + (u.moje ? '<button class="btn sm" data-unie-dorovnat="' + esc(u.area_key) + '">' + esc(tx('hra.unie_dorovnat')) + '</button>' : '')
+    : '';
+  var zavazek = '<div class="kv"><span>' + esc(tx('hra.unie_zavazek')) + '</span><b>'
+    + cislo1(u.zavazek_pridano) + ' / ' + cislo1(u.zavazek) + '</b></div>';
+  if (!u.moje) {
+    return '<div class="card"><div class="row"><h3>' + esc(u.area_key) + '</h3><b>' + esc(u.master_nick) + '</b></div>'
+      + '<div class="kv"><span>' + esc(tx('hra.unie_poplatek')) + '</span><b>' + u.poplatek_pct + ' %</b></div>'
+      + '<div class="kv"><span>' + esc(tx('hra.unie_nespokojenost')) + '</span><b>' + u.nespokojenost + ' / 100</b></div>'
+      + nespBar + zavazek + vyzva
+      + (u.duvod_vyzvy && !u.vyzyvatel_nick
+        ? '<button class="btn sm" data-unie-vyzva="' + esc(u.area_key) + '" data-licence="' + (u.licence || 0) + '">'
+          + esc(tx('hra.unie_vyzvat')) + '</button><p class="fine">' + esc(unieDuvod(u.duvod_vyzvy)) + '</p>'
+        : '<p class="fine">' + esc(tx('hra.unie_zatim_drzi')) + '</p>')
+      + '</div>';
+  }
+  return '<div class="card"><div class="row"><h3>' + esc(u.area_key) + '</h3><b class="ok">' + esc(tx('hra.unie_moje_uzemi')) + '</b></div>'
+    + '<label class="fine">' + esc(tx('hra.unie_poplatek')) + ': <b data-pct-pro="' + esc(u.area_key) + '">' + u.poplatek_pct + ' %</b></label>'
+    + pasmo
+    + '<p class="fine">' + esc(tx('hra.unie_pasmo_popis')) + '</p>'
+    + '<div class="kv"><span>' + esc(tx('hra.unie_nespokojenost')) + '</span><b class="'
+    + (u.nespokojenost >= u.vyzva_prah ? 'err' : 'ok') + '">' + u.nespokojenost + ' / 100</b></div>'
+    + nespBar
+    + '<p class="fine">' + esc(tx('veta.unie_prah', { p1: String(u.vyzva_prah) })) + '</p>'
+    + zavazek
+    + '<div class="kv"><span>' + esc(tx('hra.unie_licence')) + '</span><b>' + kcFull(u.licence) + '</b></div>'
+    + '<div class="gcard-act">'
+    + '<button class="btn sec sm" data-unie-licence="' + esc(u.area_key) + '" data-cena="' + u.licence + '">'
+    + esc(tx('hra.unie_doplatit_licenci')) + '</button>'
+    + '<button class="btn sec sm" data-unie-vypsat="' + esc(u.area_key) + '">' + esc(tx('hra.unie_vypsat_licenci')) + '</button>'
+    + '</div>' + vyzva + '</div>';
+}
+function unieDuvod(k) {
+  if (k === 'nespokojenost') return tx('hra.unie_duvod_nespokojenost');
+  if (k === 'zavazek') return tx('hra.unie_duvod_zavazek');
+  if (k === 'licence') return tx('hra.unie_duvod_licence');
+  return '';
+}
+function unieHtml(d) {
+  var r = d.role || {};
+  var h = unieRole(d);
+  if ((d.uzemi || []).length) {
+    h += '<h3 style="margin:16px 0 8px">' + esc(tx('hra.unie_uzemi')) + '</h3>'
+      + d.uzemi.map(function (u) { return unieUzemiKarta(u, d.nastaveni || {}); }).join('');
+  }
+  if ((d.licence || []).length) {
+    h += '<h3 style="margin:16px 0 8px">' + esc(tx('hra.unie_moje_licence')) + '</h3>'
+      + d.licence.map(function (l) {
+        return '<div class="card"><div class="row"><h3>' + esc(l.area_key) + '</h3><b>' + l.podil_pct + ' %</b></div>'
+          + '<p class="fine">' + esc(tx('veta.unie_licence_popis', { p1: String(l.podil_pct) })) + '</p>'
+          + '<button class="btn sec sm" data-unie-zrusit="' + esc(l.area_key) + '">' + esc(tx('hra.unie_zrusit_licenci')) + '</button></div>';
+      }).join('');
+  }
+  if (r.master && (d.volne || []).length) {
+    h += '<h3 style="margin:16px 0 8px">' + esc(tx('hra.unie_volna_uzemi')) + '</h3>'
+      + d.volne.map(function (v) {
+        return '<div class="card"><div class="row"><h3>' + esc(v.nazev || v.area_key) + '</h3><b>' + kcFull(v.licence) + '</b></div>'
+          + '<div class="kv"><span>' + esc(tx('hra.unie_volnych_mist')) + '</span><b>' + cislo1(v.volnych) + ' / ' + cislo1(v.mist) + '</b></div>'
+          + '<div class="kv"><span>' + esc(tx('hra.unie_prumerne_skore')) + '</span><b>' + v.skore + '</b></div>'
+          + '<div class="kv"><span>' + esc(tx('hra.unie_zavazek')) + '</span><b>' + cislo1(v.zavazek) + '</b></div>'
+          + '<p class="fine">' + esc(tx('hra.unie_prevzeti_popis')) + '</p>'
+          + '<button class="btn sm" data-unie-prevzit="' + esc(v.area_key) + '" data-cena="' + v.licence + '">'
+          + esc(tx('hra.unie_prevzit')) + '</button></div>';
+      }).join('');
+  }
+  if (!r.master && !(d.licence || []).length && !(d.uzemi || []).length) {
+    h += '<p class="muted small">' + esc(tx('hra.unie_zatim_nic')) + '</p>';
+  }
+  return h;
+}
+// Zaplatit z hotovosti. Na úvěr se Unie nedělá — je to pozdní hra a kdo na ni
+// nemá v hotovosti, nemá na ni vůbec.
+function unieZaplat(cena, popis) {
+  cena = Math.max(0, Math.round(cena || 0));
+  if (S.cash < cena) { toast(esc(tx('hra.na_to_nemas_hotovost')), 'err'); return false; }
+  S.cash -= cena;
+  zapis('nakup', popis, -cena, 0);
+  save();
+  return true;
+}
+function bindUnie() {
+  var box = $('unie-body'); if (!box) return;
+  var posli = function (cesta, telo, cena, popis, hotovo) {
+    if (cena && !unieZaplat(cena, popis)) return;
+    apiJson(cesta, telo).then(function (r) {
+      if (!r.ok) {
+        // Server odmítl — peníze se musí vrátit, nic se nestalo.
+        if (cena) { S.cash += cena; zapis('prijem', popis, cena, 0); save(); }
+        return toast(esc((r.j && r.j.error) || tx('hra.nepovedlo_se_34')), 'err');
+      }
+      paint(); syncState(true); UNIE = null; paintUnie();
+      if (hotovo) toast(esc(hotovo), 'ok');
+    }).catch(function () {
+      if (cena) { S.cash += cena; zapis('prijem', popis, cena, 0); save(); }
+      toast(esc(tx('hra.server_neodpovida_35')), 'err');
+    });
+  };
+  [].forEach.call(box.querySelectorAll('[data-unie-prevzit]'), function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute('data-unie-prevzit'), cena = Number(b.getAttribute('data-cena')) || 0;
+      posli('/unie/uzemi/prevzit', { area_key: k }, cena, tx('veta.unie_licence_za', { p1: k }), tx('hra.unie_prevzato'));
+    };
+  });
+  [].forEach.call(box.querySelectorAll('[data-unie-licence]'), function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute('data-unie-licence'), cena = Number(b.getAttribute('data-cena')) || 0;
+      posli('/unie/uzemi/licence', { area_key: k }, cena, tx('veta.unie_licence_za', { p1: k }), tx('hra.unie_licence_zaplacena'));
+    };
+  });
+  [].forEach.call(box.querySelectorAll('[data-unie-dorovnat]'), function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute('data-unie-dorovnat');
+      var u = (UNIE.uzemi || []).filter(function (x) { return x.area_key === k; })[0] || {};
+      posli('/unie/uzemi/dorovnat', { area_key: k }, u.vyzyvatel_cena || u.licence || 0,
+        tx('veta.unie_licence_za', { p1: k }), tx('hra.unie_dorovnano'));
+    };
+  });
+  [].forEach.call(box.querySelectorAll('[data-unie-zrusit]'), function (b) {
+    b.onclick = function () { posli('/unie/licence/zrusit', { area_key: b.getAttribute('data-unie-zrusit') }, 0, '', tx('hra.unie_licence_zrusena')); };
+  });
+  [].forEach.call(box.querySelectorAll('[data-unie-vyzva]'), function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute('data-unie-vyzva');
+      var minimum = Math.round((Number(b.getAttribute('data-licence')) || 0)
+        * (1 + ((UNIE.nastaveni || {}).vyzva_priplatek_pct || 50) / 100));
+      unieCastkaSheet(tx('hra.unie_vyzvat'), minimum, function (castka) {
+        posli('/unie/uzemi/vyzva', { area_key: k, cena: castka }, 0, '', tx('hra.unie_vyzva_podana'));
+      });
+    };
+  });
+  [].forEach.call(box.querySelectorAll('[data-unie-vypsat]'), function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute('data-unie-vypsat');
+      unieLicenceSheet(k, function (cena, podil) {
+        posli('/unie/licence/vypsat', { area_key: k, cena: cena, podil_pct: podil }, 0, '', tx('hra.unie_licence_vypsana'));
+      });
+    };
+  });
+  [].forEach.call(box.querySelectorAll('.unie-pct'), function (r) {
+    var k = r.getAttribute('data-uzemi');
+    var popis = box.querySelector('[data-pct-pro="' + k + '"]');
+    r.oninput = function () { if (popis) popis.textContent = r.value + ' %'; };
+    r.onchange = function () {
+      apiJson('/unie/uzemi/poplatek', { area_key: k, pct: Number(r.value) }).then(function (res) {
+        if (!res.ok) return toast(esc((res.j && res.j.error) || tx('hra.nepovedlo_se_34')), 'err');
+        UNIE = null; paintUnie();
+      }).catch(function () { toast(esc(tx('hra.server_neodpovida_35')), 'err'); });
+    };
+  });
+}
+// Kolik nabídnout za cizí území.
+function unieCastkaSheet(nadpis, minimum, hotovo) {
+  sheet('<h3>' + esc(nadpis) + '</h3>'
+    + '<p class="muted small">' + esc(tx('veta.unie_minimum', { p1: kcFull(minimum) })) + '</p>'
+    + '<label class="fine">' + esc(tx('hra.unie_nabidka')) + '<input id="unie-castka" class="inp" type="number" min="' + minimum
+    + '" step="1000" value="' + minimum + '"></label>'
+    + '<button class="btn big" id="unie-castka-ok" style="margin-top:12px">' + esc(tx('hra.potvrdit')) + '</button>');
+  $('unie-castka-ok').onclick = function () {
+    var v = Math.round(Number($('unie-castka').value) || 0);
+    if (v < minimum) return toast(esc(tx('veta.unie_minimum', { p1: kcFull(minimum) })), 'err');
+    closeSheet(); hotovo(v);
+  };
+}
+// Za kolik master prodává operátorskou licenci a jaký podíl ze servisu k ní patří.
+function unieLicenceSheet(areaKey, hotovo) {
+  sheet('<h3>' + esc(tx('hra.unie_vypsat_licenci')) + ' — ' + esc(areaKey) + '</h3>'
+    + '<p class="muted small">' + esc(tx('hra.unie_vypsat_popis')) + '</p>'
+    + '<label class="fine">' + esc(tx('hra.unie_cena_licence')) + '<input id="unie-lic-cena" class="inp" type="number" min="0" step="10000" value="100000"></label>'
+    + '<label class="fine">' + esc(tx('hra.unie_podil_operatora')) + '<input id="unie-lic-podil" class="inp" type="number" min="0" max="100" step="5" value="60"></label>'
+    + '<button class="btn big" id="unie-lic-ok" style="margin-top:12px">' + esc(tx('hra.potvrdit')) + '</button>');
+  $('unie-lic-ok').onclick = function () {
+    var c = Math.max(0, Math.round(Number($('unie-lic-cena').value) || 0));
+    var p = Math.max(0, Math.min(100, Math.round(Number($('unie-lic-podil').value) || 0)));
+    closeSheet(); hotovo(c, p);
+  };
 }
 // Souhrnný graf: tržby, zisk a to, co každý měsíc odteče, v jedné ose. Mezera
 // mezi ziskem a odtokem je přesně to, co hráči zbyde — proto je vybarvená.
@@ -14259,6 +14511,9 @@ function vyzvedniNasledky(then) {
             name: zd.name || esc(tx('hra.pozemek')), lat: zd.lat, lon: zd.lon,
             m2: zd.m2 || null, cena: zd.cena || 0, od: Date.now() });
         }
+        // Připravené místo: rozvržení plochy jde s pozemkem, kupující ji
+        // nestaví znovu. (Unie, krok 1)
+        if (zd.plan) { planyVse()[zakladniSpotId(x.spot_id)] = zd.plan; }
       } else if (x.kind === 'pobocka_remove') {
         S.pobocky = (S.pobocky || []).filter(function (b) { return b.name !== x.spot_id; });
       } else if (x.kind === 'pobocka_add') {
@@ -14565,14 +14820,17 @@ function drazbaVyvolatSheet() {
       pod: esc(tx('drazba.pozemek_pod_pradlomatem')),
       navrh: pozemekCenaZe(u.spotId) });
   });
-  // Holá zem — zábor bez stroje.
+  // Holá zem — zábor bez stroje. Připravené místo se pozná a stojí víc:
+  // kupující přebírá i plochu a přípojky. (Unie, krok 1)
   pozemkyPrazdne().forEach(function (z) {
     var c = CLAIMS[z.spotId] || {};
+    var pripr = !!(c.pripraveno || z.priprava);
     polozky.push({ predmet: 'pozemek', spot_id: z.spotId,
       popis: esc(z.name || tx('hra.pozemek')),
       pod: c.najemce_id ? esc(tx('drazba.pronajaty_najem_jde_s_nim'))
+        : pripr ? esc(tx('drazba.pripravene_misto'))
         : tx('drazba.pozemek_m2_pod', { p1: (z.m2 || '?'), p2: kcFull(z.cena || 0) }),
-      navrh: z.cena || 100000 });
+      navrh: (z.cena || 100000) + (z.priprava || 0) + (c.pripojky || 0) });
   });
   (CARDS_CAT || []).forEach(function (c) {
     var kusu = prevoditelnychKaret(c.kind);

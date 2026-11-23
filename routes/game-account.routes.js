@@ -498,6 +498,9 @@ async function pub(p) {
     email: p.email || null,
     first_name: p.first_name || null, last_name: p.last_name || null,
     has_details: !!(p.email && p.first_name && p.last_name),
+    // Uzavřený test pozdní hry (Unie). Klient podle toho ukazuje nebo skrývá
+    // tlačítka — server si právo stejně ověřuje u každého volání zvlášť.
+    unie: await unieSmi(p.id).catch(() => false),
     ma_heslo: !!p.password_hash,
     cards: counts, cards_prevod: prevod, state_at: p.state_at
   };
@@ -2373,6 +2376,9 @@ const claimPub = (c, me, firmy) => ({
   // Že místo stojí na vlastním pozemku, je veřejná věc — konkurence musí vědět,
   // že tam přihazovat nemá smysl.
   pozemek: !!c.pozemek,
+  // Připravené místo: zábor bez stroje, který už má natahaň přípojky.
+  // Je to nabídka, takže veřejná — kupující musí vědět, že nebude stavět od nuly.
+  pripraveno: !!(c.pripojky && !c.model),
   // Komu patří zem pod tímhle prádlomatem, když ji provozovatel prodal.
   // Taky veřejné — kdo zem vlastní, je na mapě stejně vidět. Nájem a podmínky
   // smlouvy vidí jen ti dva, kterých se týkají. (Požadavek #158)
@@ -2743,6 +2749,49 @@ router.post('/spots/dorovnat', requirePlayer, async (req, res, next) => {
 const NAJEM_MAX = 5000000;
 
 // POST /spots/pronajem { spot_id, cena, sit } — vypsat nebo stáhnout nabídku.
+// ─── UNIE: připravené místo ─────────────────────────────────────────────
+// Pozdní hra (master partner / operátor / provozovatel) se zatím pouští jen
+// vybraným hráčům. Nastavení game.unie_povoleni je buď "all", nebo pole id.
+const UNIE_KEY = 'game.unie_povoleni';
+async function unieSmi(playerId) {
+  const { getSetting } = require('../services/settings');
+  const v = await getSetting(UNIE_KEY, { type: 'json', defaultValue: null }).catch(() => null);
+  if (v === 'all' || (v && v.all === true)) return true;
+  const ids = Array.isArray(v) ? v : (v && Array.isArray(v.ids) ? v.ids : []);
+  return ids.map(Number).includes(Number(playerId));
+}
+
+// POST /spots/pripravit { spot_id, model_pro, pripojky }
+// Operátorův výrobek: na vlastní holou zem natahne přípojky, i když na ní
+// zatím nic nestojí. Tím se z ní stane „připravené místo" — kupující ušetří
+// čekání i riziko, že skóre vyjde špatně. (Unie, kroky 1)
+router.post('/spots/pripravit', requirePlayer, async (req, res, next) => {
+  try {
+    if (!(await unieSmi(req.player.id))) {
+      return res.status(403).json({ error: stx(req)('server.unie_zatim_nedostupna') });
+    }
+    const b = req.body || {};
+    const spot = s(b.spot_id, 120), modelPro = s(b.model_pro, 10) || 'flex';
+    const cur = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
+    if (!cur || cur.player_id !== req.player.id) {
+      return res.status(404).json({ error: stx(req)('server.tohle_misto_neni_tvoje_2') });
+    }
+    if (cur.model) return res.status(409).json({ error: stx(req)('server.pripravit_jde_jen_misto_bez_stroje') });
+    if (cur.pripojky) return res.status(409).json({ error: stx(req)('server.misto_uz_je_pripravene') });
+    if (cur.najemce_id) return res.status(409).json({ error: stx(req)('server.pozemek_uz_je_pronajaty') });
+    const prip = await pripojkyZa(spot, modelPro, cur.pozemek, b.pripojky);
+    // Stejně jako u stavby: uloží se, co hráč zaplatil (pripojky), a vedle toho
+    // odhad serveru (pripojky_srv). Server číslo od klienta nevynucuje — obojí
+    // se drží proto, aby šlo později porovnat, jestli si odpovídají.
+    const zaplatit = Math.max(0, Math.round(Number(prip.hra != null ? prip.hra : prip.srv) || 0));
+    await VYD.zapis(req.player.id, 'pripojky', zaplatit, spot, { pripravene_misto: true, model_pro: modelPro });
+    const up = await prisma.gameSpotClaim.update({ where: { spot_id: spot },
+      data: { pripojky: zaplatit, pripojky_srv: prip.srv } });
+    console.log('[game] připravené místo:', spot, req.player.nick, zaplatit + ' L$');
+    res.json({ ok: true, spot: claimPub(up, req.player.id, await firmyMapa()) });
+  } catch (e) { next(e); }
+});
+
 router.post('/spots/pronajem', requirePlayer, async (req, res, next) => {
   try {
     const b = req.body || {};
@@ -2946,6 +2995,11 @@ module.exports = router;
 module.exports._cards = ALL;
 module.exports._currentPlayer = currentPlayer;
 module.exports._requirePlayer = requirePlayer;
+// Sdílí je sekce Unie (routes/game-unie.routes.js): brána uzavřeného testu,
+// hlášky v jazyce hráče a firmy pro veřejný tvar záborů.
+module.exports._unieSmi = unieSmi;
+module.exports._stx = stx;
+module.exports._firmyMapa = firmyMapa;
 module.exports._pub = pub;
 module.exports._item = item;
 module.exports._cenaKusuVBalicku = cenaKusuVBalicku;

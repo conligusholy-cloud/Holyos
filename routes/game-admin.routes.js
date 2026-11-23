@@ -2040,6 +2040,80 @@ router.put('/ab-intro', api(async (req, res) => {
   res.json({ ok: true, rezim: v });
 }));
 
+// ─── Unie: uzavřený test pozdní hry ─────────────────────────────────────────
+// Kdo smí na mastera, operátora a připravená místa. Prázdný seznam = nikdo,
+// "all" = všichni. Drží se v nastavení, ať se kvůli přidání hráče nenasazuje.
+const UNIE_KEY = 'game.unie_povoleni';
+router.get('/unie', api(async (req, res) => {
+  const { vsichni, ids: vse } = await unieStav();
+  const ids = vsichni ? [] : vse;
+  const hraci = ids.length
+    ? await prisma.gamePlayer.findMany({ where: { id: { in: ids } }, select: { id: true, nick: true, company: true } })
+    : [];
+  res.json({ ok: true, vsichni, ids, hraci });
+}));
+// Načte aktuální stav povolení (sdílí GET i PUT).
+async function unieStav() {
+  const { getSetting } = require('../services/settings');
+  const v = await getSetting(UNIE_KEY, { type: 'json', defaultValue: null }).catch(() => null);
+  const vsichni = v === 'all' || !!(v && v.all === true);
+  const ids = (Array.isArray(v) ? v : (v && Array.isArray(v.ids) ? v.ids : []))
+    .map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x) && x > 0);
+  return { vsichni, ids };
+}
+router.put('/unie', api(async (req, res) => {
+  const b = req.body || {};
+  const stav = await unieStav();
+  let vsichni = stav.vsichni;
+  let ids = stav.ids.slice();
+  // Režim: celý seznam naráz, nebo přidat/odebrat jednoho hráče.
+  if (Object.prototype.hasOwnProperty.call(b, 'vsichni')) vsichni = !!b.vsichni;
+  if (Array.isArray(b.ids)) {
+    ids = b.ids.map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x) && x > 0);
+  }
+  if (b.pridat != null && String(b.pridat).trim()) {
+    const zadani = String(b.pridat).trim();
+    const cislo = /^\d+$/.test(zadani) ? parseInt(zadani, 10) : null;
+    const hrac = cislo
+      ? await prisma.gamePlayer.findUnique({ where: { id: cislo }, select: { id: true } })
+      : await prisma.gamePlayer.findFirst({ where: { nick: { equals: zadani, mode: 'insensitive' } }, select: { id: true } });
+    if (!hrac) return res.status(404).json({ error: 'Hráč „' + zadani + '" neexistuje.' });
+    ids.push(hrac.id);
+    vsichni = false;
+  }
+  if (b.odebrat != null) {
+    const pryc = parseInt(b.odebrat, 10);
+    ids = ids.filter((x) => x !== pryc);
+  }
+  ids = [...new Set(ids)].slice(0, 200);
+  const hodnota = vsichni ? 'all' : ids;
+  const { setSetting } = require('../services/settings');
+  await setSetting(UNIE_KEY, hodnota, { type: 'json',
+    description: 'Laundromat Tycoon — uzavřený test pozdní hry (Unie): "all" nebo seznam id hráčů',
+    scope: 'game', userId: req.user && req.user.id });
+  console.log('[game] Unie — povolení:', vsichni ? 'všichni' : ids.join(', ') || '(nikdo)');
+  res.json({ ok: true, vsichni, ids });
+}));
+
+// Pravidla Unie: hranice rolí, pásmo poplatku, odvod ze servisu, výzvy.
+// Patří do nastavení, ne do kódu — populace hráčů poroste a hranice se s ní
+// budou posouvat.
+const UNIE = require('../services/game/unie');
+router.get('/unie-nastaveni', api(async (req, res) => {
+  const nast = await UNIE.nastaveni();
+  const uzemi = await prisma.gameTerritory.findMany({
+    select: { area_key: true, master_nick: true, poplatek_pct: true, nespokojenost: true,
+      licence: true, vyzyvatel_nick: true },
+    orderBy: { area_key: 'asc' }, take: 200,
+  }).catch(() => []);
+  res.json({ ok: true, nastaveni: nast, vychozi: UNIE.VYCHOZI, uzemi });
+}));
+router.put('/unie-nastaveni', api(async (req, res) => {
+  const out = await UNIE.ulozNastaveni(req.body || {});
+  console.log('[game] Unie — pravidla:', JSON.stringify(out));
+  res.json({ ok: true, nastaveni: out });
+}));
+
 // ─── AI analytik hry ─────────────────────────────────────────────────────────
 // Sesbírá, jak se hráči ve hře chovají (trychtýř, retence, postup, čas ve hře, platby, zdroje, reklama)
 // a nechá Claude navrhnout konkrétní změny, které povedou k víc platbám. Poslední rozbor se ukládá.

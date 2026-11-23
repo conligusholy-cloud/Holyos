@@ -143,6 +143,9 @@
         <div id="st-odkud" class="note">Načítám…</div>
         <h3 style="font-size:14px;margin:18px 0 10px">A/B test úvodní obrazovky <span class="note">(nový návštěvník viděl úvod → založil účet)</span></h3>
         <div id="st-ab" class="note">Načítám…</div>
+        <h3 style="font-size:14px;margin:18px 0 10px">Unie prádlomatů <span class="note">(uzavřený test pozdní hry — území, licence, servisní poplatky)</span></h3>
+        <div id="st-unie" class="note">Načítám…</div>
+        <div id="st-unie-pravidla" class="note" style="margin-top:12px">Načítám…</div>
         <h3 style="font-size:14px;margin:18px 0 10px">Kudy hráči procházejí</h3>
         <div class="fn" id="st-funnel"></div>
         <h3 style="font-size:14px;margin:22px 0 10px">Vrátili se? <span class="note">(podle posledního uložení hry)</span></h3>
@@ -613,6 +616,94 @@
       fetch('/api/game-admin/ab-intro', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rezim: v }) })
         .then(function (r) { return r.json(); }).then(function () { loadAB(); }).catch(function (er) { alert('Chyba: ' + er.message); });
     });
+    // Unie prádlomatů: komu se zpřístupní pozdní hra (uzavřený test). Prázdný seznam = nikomu.
+    function loadUnie() {
+      get('/unie').then(function (j) {
+        var hraci = j.hraci || [];
+        var radky = hraci.length
+          ? hraci.map(function (h) { return '<span class="btn sm on" style="cursor:default">' + esc(h.nick || ('#' + h.id)) + ' <b data-unieod="' + h.id + '" style="cursor:pointer;margin-left:4px" title="Odebrat">\u00d7</b></span>'; }).join(' ')
+          : '<span class="note">Zatím nikdo — pozdní hra je vypnutá pro všechny.</span>';
+        document.getElementById('st-unie').innerHTML =
+          '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><span class="note">Režim:</span>'
+          + '<button class="btn sm' + (j.vsichni ? '' : ' on') + '" data-unierez="vybrani">Jen vybraní hráči</button>'
+          + '<button class="btn sm' + (j.vsichni ? ' on' : '') + '" data-unierez="vsichni">Všichni hráči</button>'
+          + '<span class="note" style="margin-left:8px">' + (j.vsichni ? 'Pozdní hru vidí každý hráč.' : 'Pozdní hru vidí jen hráči v seznamu níž.') + '</span></div>'
+          + (j.vsichni ? '' : ('<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' + radky
+              + '<input id="unie-nick" class="price-in wide" placeholder="nick nebo id hráče" style="text-align:left;width:180px">'
+              + '<button class="btn sm" data-uniepridat="1">+ Přidat</button></div>'))
+          + '<p class="note" style="margin:8px 0 0">Hráči v unii mají navíc: natažení přípojek bez stroje, nákup a prodej pozemků, území a licence. Změna se projeví do minuty.</p>';
+      }).catch(function (e) { chyba('st-unie', e); });
+    }
+    // Pravidla Unie: hranice rolí, pásmo poplatku, odvod ze servisu, výzvy.
+    var UNIE_POLE = [
+      ['master_min', 'Master partner od (prádlomatů)'],
+      ['operator_min', 'Operátor od (prádlomatů)'],
+      ['poplatek_min', 'Poplatek — dolní mez (%)'],
+      ['poplatek_max', 'Poplatek — horní mez (%)'],
+      ['odvod_pct', 'Ze servisu jde hráčům (%)'],
+      ['operator_pct', 'Z toho operátorovi (%)'],
+      ['licence_za_misto', 'Licence za volné místo (L$)'],
+      ['licence_min', 'Licence nejméně (L$)'],
+      ['zavazek_pct', 'Rozvojový závazek (% volných míst za herní rok)'],
+      ['vyzva_prah', 'Výzva od nespokojenosti'],
+      ['vyzva_mesicu', 'Výzva běží (herních měsíců)'],
+      ['vyzva_priplatek_pct', 'Vyzyvatel musí přeplatit o (%)'],
+    ];
+    function loadUniePravidla() {
+      get('/unie-nastaveni').then(function (j) {
+        var n = j.nastaveni || {}, v = j.vychozi || {};
+        var pole = UNIE_POLE.map(function (f) {
+          return '<label class="note" style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:4px 0">'
+            + '<span>' + esc(f[1]) + '</span>'
+            + '<input class="price-in" type="number" data-unien="' + f[0] + '" value="' + cz(n[f[0]] != null ? n[f[0]] : v[f[0]]) .replace(/\s/g, '') + '" style="width:110px"></label>';
+        }).join('');
+        var uz = (j.uzemi || []).length
+          ? '<div class="tbl-wrap" style="margin-top:10px"><table class="data-table"><thead><tr><th>Území</th><th>Master</th><th class="num">Poplatek</th><th class="num">Nespokojenost</th><th class="num">Licence</th><th>Výzva</th></tr></thead><tbody>'
+            + j.uzemi.map(function (u) {
+              return '<tr><td><b>' + esc(u.area_key) + '</b></td><td>' + esc(u.master_nick) + '</td>'
+                + '<td class="num">' + u.poplatek_pct + ' %</td>'
+                + '<td class="num" style="color:' + (u.nespokojenost >= (n.vyzva_prah || 40) ? '#f87171' : '#22c55e') + '">' + u.nespokojenost + '</td>'
+                + '<td class="num">' + cz(u.licence) + '</td><td>' + (u.vyzyvatel_nick ? esc(u.vyzyvatel_nick) : '—') + '</td></tr>';
+            }).join('') + '</tbody></table></div>'
+          : '<p class="note" style="margin:8px 0 0">Zatím nikdo nedrží žádné území.</p>';
+        document.getElementById('st-unie-pravidla').innerHTML =
+          '<h4 style="font-size:13px;margin:0 0 6px">Pravidla Unie</h4>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:0 18px">' + pole + '</div>'
+          + '<button class="btn sm" data-unieulozit="1" style="margin-top:8px">Uložit pravidla</button>' + uz;
+      }).catch(function (e) { chyba('st-unie-pravidla', e); });
+    }
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-unieulozit]'); if (!b) return;
+      var telo = {};
+      document.querySelectorAll('[data-unien]').forEach(function (i) { telo[i.getAttribute('data-unien')] = Number(i.value) || 0; });
+      fetch('/api/game-admin/unie-nastaveni', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(telo) })
+        .then(function (r) { return r.json(); }).then(function () { loadUniePravidla(); })
+        .catch(function (er) { alert('Chyba: ' + er.message); });
+    });
+    function ulozUnie(body) {
+      return fetch('/api/game-admin/unie', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || 'Chyba serveru'); return j; }); })
+        .then(function () { loadUnie(); }).catch(function (er) { alert('Chyba: ' + er.message); });
+    }
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      var rez = t.closest && t.closest('[data-unierez]');
+      if (rez) {
+        var vsichni = rez.getAttribute('data-unierez') === 'vsichni';
+        if (vsichni && !confirm('Zpřístupnit pozdní hru (území, licence, pozemky) všem hráčům?')) return;
+        ulozUnie({ vsichni: vsichni });
+        return;
+      }
+      var od = t.closest && t.closest('[data-unieod]');
+      if (od) { ulozUnie({ odebrat: Number(od.getAttribute('data-unieod')) }); return; }
+      var pr = t.closest && t.closest('[data-uniepridat]');
+      if (pr) {
+        var el = document.getElementById('unie-nick'); var v = (el && el.value || '').trim();
+        if (!v) { alert('Zadej nick nebo id hráče.'); return; }
+        ulozUnie({ pridat: v });
+        return;
+      }
+    });
     // Odkud hráči přišli: reklama / doporučení hráče / jiný označený zdroj / neidentifikováno
     function loadOdkud() {
       get('/odkud?dny=' + DNY).then(function (j) {
@@ -671,6 +762,8 @@
       loadProvoz();
       loadOdkud();
       loadAB();
+      loadUnie();
+      loadUniePravidla();
       loadReklama();
       get('/stats?dny=' + DNY).then(function (j) {
         var s = j.souhrn;

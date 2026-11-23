@@ -161,7 +161,8 @@ router.get('/trade/assets/:id', hrac, api(async (req, res) => {
   const [mista, karty] = await Promise.all([
     prisma.gameSpotClaim.findMany({ where: { player_id: id },
       select: { spot_id: true, name: true, model: true, rent: true, area_key: true,
-        pozemek: true, lat: true, lon: true, cena: true, najemce_id: true } }),
+        pozemek: true, lat: true, lon: true, cena: true, najemce_id: true,
+        pripojky: true, score: true } }),
     prisma.gameCard.groupBy({ by: ['kind'], where: { player_id: id, used_at: null }, _count: { _all: true } }),
   ]);
   const k = {};
@@ -178,7 +179,10 @@ router.get('/trade/assets/:id', hrac, api(async (req, res) => {
       model: m.model, area_key: m.area_key })),
     pozemky: mista.filter((m) => m.pozemek && !m.model).map((m) => ({ spot_id: m.spot_id,
       name: m.name, area_key: m.area_key, lat: m.lat, lon: m.lon, cena: m.cena,
-      pronajaty: !!m.najemce_id })),
+      pronajaty: !!m.najemce_id,
+      // Připravené místo má natahaň přípojky — kupující nestaví od nuly a vidí
+      // i skóre, takže si nekupuje zajíce v pytli. (Unie, krok 1)
+      pripraveno: !!m.pripojky, pripojky: m.pripojky || null, score: m.score })),
     pobocky: (Array.isArray(st.pobocky) ? st.pobocky : [])
       .filter((x) => x && x.name).map((x) => ({ name: x.name, lat: x.lat, lon: x.lon })),
     // Souhrnné ocenění firmy jde ven schválně: kdo kupuje podíl, má vědět,
@@ -4344,7 +4348,12 @@ async function prevedPozemek(tx, spotId, prodavajici, kupujici, podminky) {
       popis: 'Pozemek ' + popis + ' je teď ' + kupujici.nick,
       text_kod: 'dor.pozemek_prodal', text_data: { p1: popis } },
     { player_id: kupujici.id, kind: 'pozemek_add', spot_id: spotId,
-      data: { name: c.name, lat: c.lat, lon: c.lon, area_key: c.area_key, cena: c.cena },
+      // Rozvržení plochy jde s pozemkem — kupující přebírá připravené místo,
+      // ne holou parcelu, a nestaví plochu znovu. Stejně to dělá unit_add
+      // u prodeje prádlomatu. (Unie, krok 1)
+      data: { name: c.name, lat: c.lat, lon: c.lon, area_key: c.area_key, cena: c.cena,
+        pripojky: c.pripojky || null,
+        plan: ((stavu(prodavajici).plany || {})[spotId]) || null },
       popis: 'Pozemek ' + popis + ' je teď tvůj',
       text_kod: 'dor.pozemek_koupil', text_data: { p1: popis } },
   ];
