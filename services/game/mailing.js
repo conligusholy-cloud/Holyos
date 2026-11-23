@@ -79,7 +79,7 @@ async function resolveAudience(aud) {
       if (want.length) { const have = tagList(c.tags); if (!want.some((t) => have.includes(t))) return; }
       if (!has(stages, c.stage) || !has(kinds, c.kind) || !has(countries, c.country)) return;
       if (seen.has(c.email_lower)) return; seen.add(c.email_lower);
-      out.push({ email: c.email, lower: c.email_lower, vars: contactVars(c), lang: c.lang || '', created_at: c.created_at, kind: 'contact' });
+      out.push({ email: c.email, lower: c.email_lower, vars: contactVars(c), lang: c.lang || '', created_at: c.created_at, kind: 'contact', cid: c.id });
     });
   }
   if (aud.players) {
@@ -155,6 +155,21 @@ async function ensureTranslations(c, sources, langs) {
 }
 function campaignSources(c) { return c.kind === 'sequence' ? (Array.isArray(c.steps) ? c.steps : []).map((s) => ({ subject: s.subject || c.subject, body: s.body || '' })) : [{ subject: c.subject, body: c.body }]; }
 
+// ── Odkaz na hru se značkou kampaně ───────────────────────────────
+// Hra si při první návštěvě uloží utm_source / utm_medium / utm_campaign do „Odkud přišel“ (GamePlayer.zdroj),
+// takže v administraci je vidět: email / gm-<id kampaně> / k<id kontaktu> (p = hráč, t = test).
+const GAME_URL = String(process.env.GAME_URL || 'https://pradlomaty.info/game').trim();
+function tagLink(link, c, rcpt, test) {
+  try {
+    const u = new URL(link);
+    if (!/\/game\/?$/.test(u.pathname) || u.searchParams.get('utm_source')) return link;
+    u.searchParams.set('utm_source', 'email');
+    u.searchParams.set('utm_medium', 'gm-' + (c.id || 'test'));
+    u.searchParams.set('utm_campaign', test ? 't' : (rcpt && rcpt.cid ? 'k' + rcpt.cid : 'p'));
+    return u.toString();
+  } catch (e) { return link; }
+}
+
 // ── Odeslání jedné zprávy ─────────────────────────────────────────
 function fromOf(c) { return String(c.from_address || process.env.GM_MAIL_FROM || '').trim(); }
 
@@ -166,7 +181,7 @@ async function sendOne(c, rcpt, subject, body, campaignId, prefix) {
   const tx = pickText(c, l, subject, body); subject = (prefix || '') + tx.subject; body = tx.body;
   const vars = l === 'cs' ? rcpt.vars : Object.assign({}, rcpt.vars, { osloveni: rcpt.vars && rcpt.vars.jmeno ? rcpt.vars.jmeno : '' });
   try {
-    const link = c.link && /^https:\/\//.test(c.link) ? c.link : undefined;
+    const link = c.link && /^https:\/\//.test(c.link) ? tagLink(c.link, c, rcpt, campaignId === 'gm-test') : undefined;
     const r = await require('../email').sendMail({
       to: rcpt.email, from, fromName: String(c.from_name || 'Laundromats').slice(0, 80), brand: 'laundromats:' + l,
       replyTo: c.reply_to || undefined, subject: render(subject, vars).slice(0, 300), body: render(body, vars).slice(0, 20000),
@@ -317,4 +332,4 @@ function start() {
   console.log('[game-mailing] worker spuštěn (každou minutu)');
 }
 
-module.exports = { ensureTranslations, campaignSources, pickText, baseLang, LANG_NAMES, start, tick, LANGS, cleanEmail, cleanText, parseEmails, langFromCountry, slug, render, contactVars, resolveAudience, audienceCount, suppressedSet, sendTest, nextRun, fromOf, dateKey };
+module.exports = { GAME_URL, tagLink, ensureTranslations, campaignSources, pickText, baseLang, LANG_NAMES, start, tick, LANGS, cleanEmail, cleanText, parseEmails, langFromCountry, slug, render, contactVars, resolveAudience, audienceCount, suppressedSet, sendTest, nextRun, fromOf, dateKey };

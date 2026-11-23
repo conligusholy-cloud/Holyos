@@ -36,7 +36,7 @@ const who = (req) => { const p = req.user && req.user.person; return p ? ((p.fir
 router.get('/senders', wrap(async (req, res) => {
   const M = require('../services/ses/mailer');
   const list = M.isConfigured() ? (await M.sesSenders()).map((x) => ({ address: x.address, name: x.name || '', domain: x.domain })) : [];
-  res.json({ senders: list, configured: M.isConfigured(), default: process.env.GM_MAIL_FROM || null, tracking: !!process.env.SES_CONFIGURATION_SET });
+  res.json({ senders: list, configured: M.isConfigured(), default: process.env.GM_MAIL_FROM || null, game_url: GM.GAME_URL, tracking: !!process.env.SES_CONFIGURATION_SET });
 }));
 
 // ── Kontakty ──────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ function contactWhere(q) {
 }
 router.get('/contacts', wrap(async (req, res) => {
   const where = contactWhere(req.query);
-  const take = Math.min(200, parseInt(req.query.limit, 10) || 100), skip = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  const take = req.query.all ? 50000 : Math.min(200, parseInt(req.query.limit, 10) || 100), skip = Math.max(0, parseInt(req.query.offset, 10) || 0);
   const [total, items, byStatus, tagRows, extraKeys] = await Promise.all([
     prisma.gameMailContact.count({ where }),
     prisma.gameMailContact.findMany({ where, orderBy: { id: 'desc' }, take, skip }),
