@@ -72,6 +72,16 @@ async function initDb() {
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS last_name TEXT');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS phone TEXT');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS password_hash TEXT');
+  // Modelace business modelu: plátna (myšlenkové mapy) sdílená v administraci
+  await q(`CREATE TABLE IF NOT EXISTS model_boards (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    data JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[]}',
+    rev INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by TEXT
+  )`);
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_sent_at TIMESTAMPTZ');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_count INT NOT NULL DEFAULT 0');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_error TEXT');
@@ -490,6 +500,7 @@ const UICO = {
   ekonomika: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h4"/>',
   technika: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   proc: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.74c.6.48 1 1.17 1 1.94V17h6v-.32c0-.77.4-1.46 1-1.94A7 7 0 0 0 12 2z"/>',
+  model: '<circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5.5" r="2"/><circle cx="19.5" cy="5.5" r="2"/><circle cx="4.5" cy="18.5" r="2"/><circle cx="19.5" cy="18.5" r="2"/><path d="M10 10 6 7M14 10l4-3M10 14l-4 3M14 14l4 3"/>',
   uzivatele: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M16 11h6"/>',
   holyos: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
 };
@@ -497,7 +508,7 @@ const uico = (k) => `<span class="uic"><svg viewBox="0 0 24 24" fill="none" stro
 function topBar(o) {
   const en = o.lang && o.lang !== 'cs';
   const tabs = o.mode === 'admin'
-    ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })))
+    ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })), [{ k: 'model', href: '/admin/model', t: 'Modelace business modelu' }])
     : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: en ? x.en : x.cs }));
   const rt = o.mode === 'admin'
     ? `<a href="/portal" class="rtl">${uico('report')}<span>Uživatelské prostředí</span></a><a href="/portal/logout" class="rtl"><span>Odhlásit</span></a>`
@@ -867,6 +878,91 @@ app.post('/admin/api/users/:id(\\d+)/delete', requireAdmin, express.json({ limit
   if (!r) return res.json({ ok: false, error: 'Nenalezeno' });
   if (String(r.email).toLowerCase() === String((req.admin && req.admin.email) || '').toLowerCase()) return res.json({ ok: false, error: 'Sám sebe smazat nelze' });
   await q('DELETE FROM admin_users WHERE id=$1', [req.params.id]); res.json({ ok: true });
+});
+// ── Modelace business modelu: plátno s myšlenkovou mapou ────────────────────
+let MODEL_JS = null;
+app.get('/admin/model.js', requireAdmin, (req, res) => {
+  if (!MODEL_JS) MODEL_JS = fs.readFileSync(path.join(__dirname, 'model-client.js'), 'utf8');
+  res.set('Cache-Control', 'no-cache').type('application/javascript').send(MODEL_JS);
+});
+const MODEL_CSS = `
+#mb{position:fixed;left:244px;top:0;right:0;bottom:0;background:#050a14;overflow:hidden}
+#mb-view{position:absolute;inset:0;overflow:hidden;cursor:grab;touch-action:none;background-image:radial-gradient(rgba(122,168,255,.22) 1.2px,transparent 1.4px);background-size:28px 28px;user-select:none;-webkit-user-select:none}
+#mb-view.pan{cursor:grabbing}
+#mb-world{position:absolute;left:0;top:0;transform-origin:0 0}
+#mb-svg{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}#mb-svg .eh{pointer-events:stroke}
+#mb-nodes{position:absolute;left:0;top:0}
+.n{position:absolute;min-width:120px;max-width:280px;padding:12px 16px;border-radius:14px;background:#0d1b30;border:2px solid var(--c,#22e6ff);color:#eef4ff;font-size:15px;line-height:1.35;cursor:move;box-shadow:0 8px 26px -10px rgba(0,0,0,.7),0 0 18px -8px var(--c,#22e6ff)}
+.n .t{white-space:pre-wrap;word-break:break-word;min-height:20px;outline:none;cursor:inherit}.n.edit{cursor:text;user-select:text;-webkit-user-select:text}.n.edit .t{cursor:text}
+.n.sel{box-shadow:0 0 0 3px rgba(255,255,255,.85),0 0 26px -4px var(--c,#22e6ff)}.n.tgt{box-shadow:0 0 0 3px #22c55e,0 0 26px -4px #22c55e}
+.n .h{position:absolute;right:-10px;top:50%;width:18px;height:18px;margin-top:-9px;border-radius:50%;background:var(--c,#22e6ff);border:2px solid #050a14;cursor:crosshair;opacity:0;transition:opacity .15s,transform .15s}
+.n:hover .h,.n.sel .h{opacity:1}.n .h:hover{transform:scale(1.25)}
+#mb-bar{position:absolute;left:14px;top:12px;max-width:calc(100% - 400px);z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-radius:14px;background:rgba(10,18,36,.92);border:1px solid var(--line);backdrop-filter:blur(10px)}
+#mb-bar button,#mb-bar select{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:7px 11px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:auto}
+#mb-bar button:hover:not(:disabled){border-color:var(--cy)}#mb-bar button:disabled{opacity:.35;cursor:default}
+#mb-bar .sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+#mb-colors{display:flex;gap:5px;align-items:center}#mb-colors button{width:20px;height:20px;padding:0;border-radius:50%;border:2px solid transparent}#mb-colors button.on{border-color:#fff}
+#mb-st{font-size:12px;color:#86efac;min-width:80px}#mb-zoom{font-size:12px;color:var(--mut);min-width:42px;text-align:center}
+#mb-title{position:absolute;left:16px;bottom:14px;z-index:4;font-size:13px;color:var(--mut);pointer-events:none}
+#mb-empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;text-align:center;color:var(--mut);max-width:420px;line-height:1.7}
+#mb-empty b{color:var(--text);font-size:18px;display:block;margin-bottom:6px}
+#mb-help{position:absolute;right:14px;bottom:12px;z-index:4;font-size:11.5px;color:#6f84a6;text-align:right;line-height:1.55;pointer-events:none}
+@media(max-width:900px){#mb{position:relative;left:auto;right:auto;top:auto;bottom:auto;height:calc(100vh - 190px);min-height:440px}#mb-bar{max-width:calc(100% - 28px)}#mb-help{display:none}}`;
+app.get('/admin/model', requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Modelace business modelu — Laundry Unlimited</title>
+<style>${ADMIN_CSS}${BAR_CSS}@media(min-width:901px){body:has(> .uside){overflow:hidden}}${MODEL_CSS}</style></head><body>${topBar({ mode: 'admin', active: 'model' })}
+<div id="mb"><div id="mb-view"><div id="mb-world"><svg id="mb-svg"></svg><div id="mb-nodes"></div></div></div>
+<div id="mb-bar"><select id="mb-sel" title="Plátno"></select><button id="mb-newb" type="button" title="Nové plátno">＋ Plátno</button><button id="mb-ren" type="button" title="Přejmenovat plátno">✎</button><button id="mb-delb" type="button" title="Smazat plátno">🗑</button><span class="sep"></span>
+<button id="mb-add" type="button">＋ Uzel</button><span id="mb-selbox" style="display:none;gap:8px;align-items:center"><button id="mb-child" type="button" title="Přidat navazující uzel (Tab)">↳ Navazující</button><span id="mb-colors"></span><button id="mb-del" type="button" title="Smazat vybrané (Delete)">Smazat</button></span><span class="sep"></span>
+<button id="mb-undo" type="button" title="Zpět (Ctrl+Z)">↶</button><button id="mb-redo" type="button" title="Znovu (Ctrl+Y)">↷</button><span class="sep"></span>
+<button id="mb-zout" type="button">−</button><span id="mb-zoom">100 %</span><button id="mb-zin" type="button">＋</button><button id="mb-fit" type="button" title="Zobrazit vše">Vše</button><span id="mb-st"></span></div>
+<div id="mb-title"></div>
+<div id="mb-empty" style="display:none"><b>Prázdné plátno</b>Dvojklikem do plátna přidáš první uzel. Z kroužku na kraji uzlu přetáhni čáru do prázdna — vznikne navazující uzel, nebo na jiný uzel — spojí je.</div>
+<div id="mb-help">Dvojklik = nový / upravit uzel · Tab = navazující uzel · Delete = smazat<br>Kolečko = zoom · tažení prázdného místa = posun · Ctrl+Z = zpět</div></div>
+<script src="/admin/model.js"></script></body></html>`);
+});
+const modelClean = (d) => {
+  const str = (v, n) => String(v == null ? '' : v).slice(0, n), num = (v) => { const x = Math.round(Number(v)); return isFinite(x) ? Math.max(-100000, Math.min(100000, x)) : 0; };
+  const nodes = (Array.isArray(d && d.nodes) ? d.nodes : []).slice(0, 500).map((n) => ({ id: str(n.id, 40).replace(/[^\w-]/g, ''), x: num(n.x), y: num(n.y), text: str(n.text, 2000), color: /^#[0-9a-f]{6}$/i.test(String(n.color || '')) ? n.color : '#22e6ff' })).filter((n) => n.id);
+  const ids = new Set(nodes.map((n) => n.id));
+  const edges = (Array.isArray(d && d.edges) ? d.edges : []).slice(0, 1500).map((e) => ({ id: str(e.id, 40).replace(/[^\w-]/g, ''), from: str(e.from, 40).replace(/[^\w-]/g, ''), to: str(e.to, 40).replace(/[^\w-]/g, '') })).filter((e) => e.id && ids.has(e.from) && ids.has(e.to) && e.from !== e.to);
+  return { nodes, edges };
+};
+app.get('/admin/api/model/boards', requireAdmin, async (req, res) => {
+  try {
+    let rows = (await q('SELECT id, name, updated_at FROM model_boards ORDER BY id')).rows;
+    if (!rows.length) { await q('INSERT INTO model_boards (name, data) VALUES ($1,$2)', ['Business model', JSON.stringify({ nodes: [{ id: 'n_root', x: 0, y: 0, text: 'Business model', color: '#22e6ff' }], edges: [] })]); rows = (await q('SELECT id, name, updated_at FROM model_boards ORDER BY id')).rows; }
+    res.json({ ok: true, boards: rows });
+  } catch (e) { res.json({ ok: false, error: 'Plátna se nepodařilo načíst' }); }
+});
+app.get('/admin/api/model/boards/:id(\\d+)', requireAdmin, async (req, res) => {
+  const r = (await q('SELECT id, name, data, rev FROM model_boards WHERE id=$1', [req.params.id]).catch(() => ({ rows: [] }))).rows[0];
+  if (!r) return res.json({ ok: false, error: 'Plátno nenalezeno' });
+  res.set('Cache-Control', 'no-store').json({ ok: true, id: r.id, name: r.name, data: r.data, rev: r.rev });
+});
+app.post('/admin/api/model/boards', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  const name = String((req.body || {}).name || '').trim().slice(0, 80);
+  if (!name) return res.json({ ok: false, error: 'Zadejte název plátna' });
+  const r = (await q('INSERT INTO model_boards (name, updated_by) VALUES ($1,$2) RETURNING id, name', [name, (req.admin && req.admin.name) || ''])).rows[0];
+  res.json({ ok: true, id: r.id, name: r.name });
+});
+app.post('/admin/api/model/boards/:id(\\d+)', requireAdmin, express.json({ limit: '3mb' }), async (req, res) => {
+  const b = req.body || {}; const data = modelClean(b.data);
+  // Optimistická kontrola verze: když mezitím uložil někdo jiný, nepřepíšeme jeho práci
+  const r = await q('UPDATE model_boards SET data=$2, rev=rev+1, updated_at=now(), updated_by=$4 WHERE id=$1 AND rev=$3 RETURNING rev', [req.params.id, JSON.stringify(data), Number(b.rev) || 0, (req.admin && req.admin.name) || '']);
+  if (!r.rowCount) { const ex = (await q('SELECT 1 FROM model_boards WHERE id=$1', [req.params.id])).rowCount; return res.status(ex ? 409 : 404).json({ ok: false, error: ex ? 'Plátno mezitím změnil jiný uživatel' : 'Plátno nenalezeno' }); }
+  res.json({ ok: true, rev: r.rows[0].rev });
+});
+app.post('/admin/api/model/boards/:id(\\d+)/rename', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  const name = String((req.body || {}).name || '').trim().slice(0, 80);
+  if (!name) return res.json({ ok: false, error: 'Zadejte název plátna' });
+  const r = await q('UPDATE model_boards SET name=$2 WHERE id=$1 RETURNING name', [req.params.id, name]);
+  res.json(r.rowCount ? { ok: true, name: r.rows[0].name } : { ok: false, error: 'Plátno nenalezeno' });
+});
+app.post('/admin/api/model/boards/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  const n = (await q('SELECT count(*)::int AS n FROM model_boards')).rows[0].n;
+  if (n < 2) return res.json({ ok: false, error: 'Poslední plátno nejde smazat' });
+  await q('DELETE FROM model_boards WHERE id=$1', [req.params.id]); res.json({ ok: true });
 });
 app.get('/admin/m/:sekce(report|ekonomika|technika|proc)', requireAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex').send(materialsPage(req.params.sekce, topBar({ mode: 'admin', active: req.params.sekce }), 'Administrace'));
