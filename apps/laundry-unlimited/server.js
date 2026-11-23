@@ -1108,6 +1108,33 @@ const modelGraphText = (d) => {
   const txt = (s) => String(s).replace(/\s+/g, ' ').trim();
   return 'UZLY:\n' + d.nodes.map((n) => '[' + n.id + '] ' + txt(n.text || '(prázdný)')).join('\n') + '\n\nSPOJENÍ:\n' + d.edges.map((e) => e.from + ' → ' + e.to).join('\n');
 };
+// Tabulka „Rozdělení financí“ jako text pro AI (rozbor mapy i poradce) — ať AI vidí i dohodnuté podíly a čísla
+const FIN_FREQ_T = { once: 'jednorázově', tx: 'z každé transakce', day: 'denně', week: 'týdně', month: 'měsíčně', month_unit: 'měsíčně z prádlomatu', quarter: 'čtvrtletně', half: 'půlročně', year: 'ročně', y5: 'každých 5 let', y10: 'každých 10 let' };
+async function financeText() {
+  try {
+    const r = (await q('SELECT data FROM finance_split WHERE id=1')).rows[0]; if (!r || !r.data) return '';
+    const d = r.data, cols = Array.isArray(d.cols) ? d.cols : [], rows = Array.isArray(d.rows) ? d.rows : [];
+    if (!rows.length) return '';
+    const n = (x) => (typeof x === 'number' ? String(Math.round(x * 100) / 100).replace('.', ',') : null);
+    const out = ['Pozice (sloupce): ' + cols.map((c) => c.name || '?').join(' | '), 'Řádek = co se dělí; „cena“ = z čeho se počítá (EUR bez DPH); „k rozdělení“ = volné prostředky z ceny (EUR / %); podíly = kolik % z volných prostředků dostane která pozice.'];
+    rows.forEach((x, i) => {
+      const pct = typeof x.pct === 'number' ? x.pct : (x.price > 0 && typeof x.amt === 'number' ? Math.round(x.amt / x.price * 10000) / 100 : null);
+      const pool = typeof x.amt === 'number' ? x.amt : (x.price > 0 && typeof pct === 'number' ? Math.round(x.price * pct) / 100 : null);
+      let sum = 0, any = false;
+      const sh = cols.map((c) => { const v = x.v && typeof x.v[c.id] === 'number' ? x.v[c.id] : null; if (v == null) return null; sum += v; any = true; return (c.name || '?') + ' ' + n(v) + ' %' + (pool != null ? ' (= ' + n(Math.round(pool * v) / 100) + ' €)' : ''); }).filter(Boolean);
+      out.push((i + 1) + '. ' + (String(x.name || '').trim() || '(bez názvu)') + (x.price > 0 ? ' | cena ' + n(x.price) + ' €' : '') + (pool != null ? ' | k rozdělení ' + n(pool) + ' €' + (pct != null ? ' (' + n(pct) + ' %)' : '') : '') + (x.freq ? ' | ' + (FIN_FREQ_T[x.freq] || x.freq) : '') + ' | podíly: ' + (sh.length ? sh.join(', ') : '???') + (any ? ' | součet ' + n(Math.round(sum * 100) / 100) + ' %' + (Math.abs(sum - 100) > 0.01 ? ' (NESEDÍ na 100 %)' : '') : ''));
+    });
+    const pl = d.model && d.model.plan;
+    if (pl) { const yr = (a) => (Array.isArray(a) ? a.map((v) => (v == null ? '–' : n(v))).join(', ') : ''); const ln = [];
+      if (Array.isArray(pl.pr) && pl.pr.some((v) => v != null)) ln.push('nové prádlomaty v roce 1–10: ' + yr(pl.pr));
+      if (Array.isArray(pl.op) && pl.op.some((v) => v != null)) ln.push('noví operátoři v roce 1–10: ' + yr(pl.op));
+      if (Array.isArray(pl.sub) && pl.sub.some((v) => v != null)) ln.push('noví předplatitelé MARKET PLACE v roce 1–10: ' + yr(pl.sub));
+      if (pl.txm != null) ln.push('transakcí / měsíc na předplatitele: ' + n(pl.txm));
+      if (ln.length) out.push('', 'Výhled na 10 let (zadané objemy): ' + ln.join('; ')); }
+    return out.join('\n').slice(0, 30000);
+  } catch (e) { console.warn('[lu] finance text:', e.message); return ''; }
+}
+const withFinance = async (graph) => { const f = await financeText(); return f ? graph + '\n\n=== TABULKA „ROZDĚLENÍ FINANCÍ“ (záložka administrace; doplňuje mapu) ===\n' + f : graph; };
 // AI rozbor mapy: server z plátna poskládá text (uzly + spojení), HolyOS (Claude) vrátí strukturovaný výsledek
 app.post('/admin/api/model/boards/:id(\\d+)/analyze', requireAdmin, express.json({ limit: '3mb' }), async (req, res) => {
   try {
@@ -1115,7 +1142,7 @@ app.post('/admin/api/model/boards/:id(\\d+)/analyze', requireAdmin, express.json
     const d = modelClean((req.body || {}).data);
     if (d.nodes.length < 2) return res.json({ ok: false, error: 'Na plátně je málo uzlů k rozboru' });
     const nm = (await q('SELECT name FROM model_boards WHERE id=$1', [req.params.id]).catch(() => ({ rows: [] }))).rows[0];
-    const graph = modelGraphText(d);
+    const graph = await withFinance(modelGraphText(d));
     const svc = jwt.sign({ aud: 'holyos-api', iss: 'laundry-unlimited' }, LU_SECRET, { expiresIn: '5m' });
     const resp = await fetch(HOLYOS_URL + '/api/auth/lu/model-analyze', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nm ? nm.name : 'Business model', graph }), signal: AbortSignal.timeout(280000) });
     let j = {}; try { j = await resp.json(); } catch (e) { /* bez těla */ }
@@ -1132,7 +1159,7 @@ app.post('/admin/api/model/boards/:id(\\d+)/chat', requireAdmin, express.json({ 
     const nm = (await q('SELECT name FROM model_boards WHERE id=$1', [req.params.id]).catch(() => ({ rows: [] }))).rows[0];
     const svc = jwt.sign({ aud: 'holyos-api', iss: 'laundry-unlimited' }, LU_SECRET, { expiresIn: '5m' });
     const resp = await fetch(HOLYOS_URL + '/api/auth/lu/model-chat', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: nm ? nm.name : 'Business model', graph: modelGraphText(d), message, history: Array.isArray(b.history) ? b.history.slice(-14) : [], brief: String(b.brief || '').slice(0, 6000) }), signal: AbortSignal.timeout(150000) });
+      body: JSON.stringify({ name: nm ? nm.name : 'Business model', graph: await withFinance(modelGraphText(d)), message, history: Array.isArray(b.history) ? b.history.slice(-14) : [], brief: String(b.brief || '').slice(0, 6000) }), signal: AbortSignal.timeout(150000) });
     let j = {}; try { j = await resp.json(); } catch (e) { /* bez těla */ }
     if (!resp.ok || !j.ok) return res.json({ ok: false, error: j.error || ('HolyOS odpovědělo ' + resp.status) });
     res.json({ ok: true, odpoved: j.odpoved, zmeny: j.zmeny || [], rychle: j.rychle || [] });
