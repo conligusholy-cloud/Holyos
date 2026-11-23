@@ -219,6 +219,12 @@ textarea{min-height:130px;resize:vertical}.row2{display:grid;grid-template-colum
 footer{padding:46px 0;color:#7f8fab;font-size:13.5px;border-top:1px solid var(--line);background:rgba(2,5,12,.6);backdrop-filter:blur(10px)}footer b{color:#fff;font-weight:500}
 .js .rv{opacity:0;transform:translateY(50px) scale(.98);transition:opacity .9s var(--ease),transform 1.1s var(--ease);transition-delay:calc(var(--i,0)*90ms)}.js .rv.in{opacity:1;transform:none}
 @media(prefers-reduced-motion:reduce){.aur i,.ring,.core,.bb,.tick div,.wire,h1,.lbl:before,.tag:before{animation:none}.js .rv{opacity:1;transform:none;transition:none}}
+/* Horní lišta na menších obrazovkách: odkazy se nikdy nelámou na dva řádky, postupně se zkracuje a skrývá */
+.bar nav a,.lang a{white-space:nowrap}.bar .wrap>a{flex:none}.bar nav{flex-wrap:nowrap}
+@media(max-width:1340px){.bar .wrap{gap:16px;padding-left:20px}.bar nav{gap:18px;font-size:13px}.bar .btn{padding:12px 18px}.lang a{padding:6px 8px}}
+@media(max-width:1140px){.bar nav a.hide{display:none}.bar nav{gap:12px}}
+@media(max-width:600px){.bar{top:8px}.bar .wrap{height:54px;padding:0 6px 0 14px;gap:8px}.bar .wrap>a img,.bar .wrap>a svg{height:34px!important;width:auto}.lang{padding:3px}.lang a{padding:5px 6px;font-size:10px;letter-spacing:.06em}.bar .btn{padding:10px 13px;font-size:12px}.bar .btn svg{display:none}.lgi{width:36px;height:36px;margin-left:2px}.lgi svg{width:18px;height:18px}}
+@media(max-width:430px){.bar nav a.btn{display:none}.bar .wrap>a img,.bar .wrap>a svg{height:30px!important}}
 @media(max-width:900px){.facts,.mgrid,.duo,.steps,.brands,.row2{grid-template-columns:1fr}.bento{grid-template-columns:1fr}.bento>.b{grid-column:auto!important;min-height:0}
 section{padding:80px 0}.hero{padding:140px 0 40px}.facts{margin-top:50px}.sec-h{margin-bottom:36px;gap:18px}.bar{top:10px}.bar .wrap{height:58px;padding:0 8px 0 18px;gap:12px}.bar nav a.hide{display:none}.bar nav{gap:10px}
 .drum{right:-45%;top:22%;width:120vw;opacity:.55}.big,.pan{padding:30px 24px 16px}.cta-card{padding:44px 28px}form.box{padding:32px 22px}.page{padding:120px 0 80px}.brands figure:nth-child(2){margin:0}.brands img{min-height:280px}.tick span{font-size:26px}.steps .line{display:none}.steps{padding-top:0}}
