@@ -277,7 +277,8 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
     const pLink = noLink ? '' : (link && link.startsWith('http') ? link : site + (link || ''));
     const inlineBtn = pLink ? `</div><div style="margin:18px 0 18px;"><a href="${escapeHtml(pLink)}" style="display:inline-block;padding:14px 28px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:10px;font-size:15px;font-weight:700;">${escapeHtml(linkLabel || 'Otevřít')}</a></div><div style="font-size:15px;line-height:1.7;color:#334867;">` : '';
     // [[tlacitko]] v textu zprávy = tlačítko s odkazem na tomto místě (tolerantní k překladu značky)
-    const bodyHtml = body ? escapeHtml(body).replace(/(?:<br>|\n)*\[\[\s*(?:tlacitko|tlačítko|button|przycisk|knopf|gomb|buton|bottone|boton|bouton)\s*\]\](?:<br>|\n)*/gi, inlineBtn).replace(/\n/g, '<br>') : '';
+    const boldMd = (t) => lLang ? t.replace(/(^|[\s(>])\*\*(?!\s)([^*\n]+?)(?<!\s)\*\*(?=$|[\s.,!?:;)<])/g, '$1<strong>$2</strong>').replace(/(^|[\s(>])\*(?!\s)([^*\n]+?)(?<!\s)\*(?=$|[\s.,!?:;)<])/g, '$1<strong>$2</strong>') : t;
+    const bodyHtml = body ? boldMd(escapeHtml(body)).replace(/(?:<br>|\n)*\[\[\s*(?:tlacitko|tlačítko|button|przycisk|knopf|gomb|buton|bottone|boton|bouton)\s*\]\](?:<br>|\n)*/gi, inlineBtn).replace(/\n/g, '<br>') : '';
     const brandTitle = lLang ? '💧 LAUNDROMATS 💧' : '💧 PRÁDLOMATY 💧';
     const brandSub = lt ? lt.sub : 'Samoobslužné prádelny';
     return `<!DOCTYPE html>

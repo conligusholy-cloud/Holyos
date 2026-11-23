@@ -131,6 +131,15 @@ function ma(podminka, popis, detail) {
     ma(!/zahaj\(/.test(SRC), 'analytik nikde nezahajuje řízení');
     ma(!/gameZlocin\./.test(SRC), 'a nesahá na případy');
     ma(/ANTHROPIC_API_KEY/.test(SRC) && /není na serveru nastavený/.test(SRC), 'bez klíče řekne proč');
+    // Podklad nesmí tahat uložené stavy hry všech hráčů — jeden má přes
+    // tři čtvrtě megabajtu a stovka hráčů server položí (502).
+    ma(!/hra_s_celkem: true, disabled: true, invited_by_id: true, state: true/.test(SRC),
+      'přehled netahá stav hry všech hráčů');
+    ma(/where: \{ id: \{ in: kratke\.map/.test(SRC), 'hotovost se dotahuje jen pro ty v přehledu');
+    ma(/spustNaPozadi/.test(SRC), 'analýza umí běžet na pozadí');
+    const SP = fs.readFileSync(path.join(__dirname, '..', 'services/game/spojeni.js'), 'utf8');
+    ma(/STRANKA/.test(SP) && /cursor/.test(SP), 'přístupy se čtou po stránkách, ne všechny najednou');
+    ma(!/take: 300000/.test(SP), 'a ne tři sta tisíc řádků v jednom dotazu');
     const ADM = fs.readFileSync(path.join(__dirname, '..', 'routes/game-admin.routes.js'), 'utf8');
     ma(/\/zlocin\/analytik\/podklad/.test(ADM), 'podklad se dá zkontrolovat');
     const RIZ = fs.readFileSync(path.join(__dirname, '..', 'services/game/zlocin-rizeni.js'), 'utf8');

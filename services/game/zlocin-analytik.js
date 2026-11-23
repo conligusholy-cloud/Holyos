@@ -31,8 +31,12 @@ const orez = (s, n) => String(s == null ? '' : s).slice(0, n);
 // ─── Podklad ─────────────────────────────────────────────────────────────────
 async function podklady(prisma) {
   const [hraci, obchody, drazby, prihozy, pujcky, equity, aliance, clenove, mista, market] = await Promise.all([
+    // POZOR: bez state. Uložený stav hry má u velkého hráče přes tři čtvrtě
+    // megabajtu a stovka hráčů by server položila (a padá to na 502, ne na
+    // chybu, kterou by bylo vidět). Hotovost se dotáhne až pro tu hrstku
+    // účtů, které se do přehledu opravdu dostanou.
     prisma.gamePlayer.findMany({ select: { id: true, nick: true, company: true, created_at: true,
-      hra_s_celkem: true, disabled: true, invited_by_id: true, state: true } }),
+      hra_s_celkem: true, disabled: true, invited_by_id: true } }),
     prisma.gameTrade.findMany({ where: { stav: 'prijato' },
       select: { id: true, from_id: true, to_id: true, smer: true, predmet: true, model: true, cena: true, resolved_at: true } }),
     prisma.gameDrazba.findMany({ where: { stav: 'hotovo' },
@@ -51,7 +55,6 @@ async function podklady(prisma) {
 
   const P = new Map(hraci.map((h) => [h.id, h]));
   const jm = (id) => { const h = P.get(id); return h ? (h.nick || ('#' + id)) : ('#' + id); };
-  const hotovost = (h) => Math.round(((h.state || {}).cash) || 0);
   const strojuMap = new Map(mista.map((m) => [m.player_id, m._count._all]));
 
   // Tok hodnoty mezi dvojicemi účtů: obchody, dražby, tržiště, půjčky.
@@ -86,6 +89,14 @@ async function podklady(prisma) {
       pohyb: (poslal.get(h.id) || 0) + (prijal.get(h.id) || 0) }))
     .filter((x) => x.min < 120 && x.pohyb > 1000000)
     .sort((a, b) => b.pohyb - a.pohyb).slice(0, 12);
+  // Hotovost jen pro ty, co se do přehledu dostali — ne pro celou hru.
+  const hotovosti = new Map();
+  if (kratke.length) {
+    (await prisma.gamePlayer.findMany({ where: { id: { in: kratke.map((x) => x.h.id) } },
+      select: { id: true, state: true } }).catch(() => []))
+      .forEach((h) => hotovosti.set(h.id, Math.round(((h.state || {}).cash) || 0)));
+  }
+  const hotovost = (h) => hotovosti.get(h.id) || 0;
 
   // Obchody daleko od ceníku.
   const divne = obchody
@@ -225,6 +236,21 @@ function ocisti(j) {
   };
 }
 
+// Analýza trvá desítky vteřin — model čte celý přehled. Držet kvůli tomu
+// otevřený požadavek znamená 502 dřív, než model dopíše. Běží proto na
+// pozadí a výsledek se vyzvedne druhým dotazem.
+let bezi = false;
+function stav() { return { bezi }; }
+function spustNaPozadi(prisma) {
+  if (bezi) return { ok: true, bezi: true, uz_bezi: true };
+  bezi = true;
+  Promise.resolve().then(() => analyzuj(prisma))
+    .then((r) => { if (!r.ok) console.warn('[zlocin-analytik] ' + r.error); })
+    .catch((e) => console.warn('[zlocin-analytik]', e && e.message))
+    .then(() => { bezi = false; });
+  return { ok: true, bezi: true };
+}
+
 async function posledni() {
   const v = await getSetting(KLIC, { type: 'json', defaultValue: null }).catch(() => null);
   return (v && typeof v === 'object') ? v : null;
@@ -260,4 +286,5 @@ async function analyzuj(prisma) {
   }
 }
 
-module.exports = { analyzuj, posledni, podklady, ocisti, rozparsuj, SYSTEM, UZ_HLIDAME, MODEL, KLIC };
+module.exports = { analyzuj, spustNaPozadi, stav, posledni, podklady, ocisti, rozparsuj,
+  SYSTEM, UZ_HLIDAME, MODEL, KLIC };

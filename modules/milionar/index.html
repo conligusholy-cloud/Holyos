@@ -1988,12 +1988,21 @@
         }).join('') + '</tbody></table></div>';
       box.innerHTML = h;
     }
+    // Běží na pozadí, tak se na výsledek doptáváme. Držet otevřený požadavek
+    // desítky vteřin znamená 502 dřív, než model dopíše.
     document.getElementById('zl-ai-spust').onclick = function () {
-      var b = this;
-      document.getElementById('zl-ai-body').innerHTML = '<p class="note">Model čte hru… (chvíli to trvá)</p>';
+      var b = this, pokus = 0;
+      var box = document.getElementById('zl-ai-body');
+      box.innerHTML = '<p class="note">Model čte hru… (trvá to i minutu)</p>';
       b.disabled = true;
-      post('/zlocin/analytik', {}).then(function () { return get('/zlocin/analytik'); })
-        .then(function (j) { b.disabled = false; zlAiVykresli(j); })
+      var konec = function (j) { b.disabled = false; zlAiVykresli(j); };
+      var ptej = function () {
+        get('/zlocin/analytik').then(function (j) {
+          if (j.bezi && pokus++ < 40) { setTimeout(ptej, 4000); return; }
+          konec(j);
+        }).catch(function (e) { b.disabled = false; chyba('zl-ai-body', e); });
+      };
+      post('/zlocin/analytik', {}).then(function () { setTimeout(ptej, 4000); })
         .catch(function (e) { b.disabled = false; chyba('zl-ai-body', e); });
     };
     document.getElementById('zl-ai-podklad').onclick = function () {

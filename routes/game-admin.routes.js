@@ -830,12 +830,18 @@ router.get('/zlocin/agent', api(async (req, res) => {
 // detektor, který se podle návrhu teprve napíše.
 router.get('/zlocin/analytik', api(async (req, res) => {
   const A = require('../services/game/zlocin-analytik');
-  res.json({ ok: true, model: A.MODEL, klic: !!process.env.ANTHROPIC_API_KEY, analyza: await A.posledni() });
+  res.json(Object.assign({ ok: true, model: A.MODEL, klic: !!process.env.ANTHROPIC_API_KEY,
+    analyza: await A.posledni() }, A.stav()));
 }));
+// Spouští se na pozadí: model čte celý přehled a trvá to desítky vteřin,
+// takže otevřený požadavek by spadl na 502 dřív, než dopíše. Výsledek se
+// vyzvedne dotazem výš.
 router.post('/zlocin/analytik', api(async (req, res) => {
   const A = require('../services/game/zlocin-analytik');
-  const r = await A.analyzuj(prisma);
-  res.status(r.ok ? 200 : 400).json(r);
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(400).json({ error: 'ANTHROPIC_API_KEY není na serveru nastavený — bez něj analytik nepoběží.' });
+  }
+  res.json(A.spustNaPozadi(prisma));
 }));
 // GET /zlocin/analytik/podklad → co přesně model dostane. Bez toho se nedá
 // posoudit, jestli jeho nález stojí na datech, nebo si ho vymyslel.
