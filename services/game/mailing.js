@@ -104,12 +104,12 @@ async function audienceCount(aud) {
 }
 
 // ── Překlady do jazyka příjemce ────────────────────────────────────
-// Jazyk příjemce = jazyk kontaktu (odvozený ze země) / hráče; neznámý = jazyk šablony kampaně.
+// Jazyk příjemce = jazyk kontaktu (odvozený ze země) / hráče; neznámý = angličtina.
 // Překlad dělá Claude jednou pro každý text a jazyk, ukládá se do kampaně (translations) pod hash zdroje,
 // takže změna textu vyvolá nový překlad. Když překlad selže, odejde text v jazyce kampaně.
 const LANG_NAMES = { cs: 'čeština', en: 'angličtina', pl: 'polština', sk: 'slovenština', de: 'němčina', hu: 'maďarština', ro: 'rumunština', it: 'italština', es: 'španělština', fr: 'francouzština' };
 const baseLang = (c) => (LANGS.includes(c.lang) ? c.lang : 'cs');
-function langOf(c, rcpt) { const l = String((rcpt && rcpt.lang) || '').slice(0, 2).toLowerCase(); return LANGS.includes(l) ? l : baseLang(c); }
+function langOf(c, rcpt) { const l = String((rcpt && rcpt.lang) || '').slice(0, 2).toLowerCase(); return LANGS.includes(l) ? l : 'en'; }  // neznámá země / jazyk → angličtina
 function srcKey(subject, body, linkLabel) { return require('crypto').createHash('sha1').update(String(subject || '') + '\u0001' + String(body || '') + '\u0001' + String(linkLabel || '')).digest('hex').slice(0, 16); }
 function pickText(c, l, subject, body) {
   const out = { subject, body, link_label: c.link_label || '' };
