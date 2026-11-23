@@ -85,6 +85,28 @@
     var c2 = { x: q.x + (q.d === 'r' ? k : q.d === 'l' ? -k : 0), y: q.y + (q.d === 'b' ? k : q.d === 't' ? -k : 0) };
     return 'M' + p.x + ',' + p.y + ' C' + c1.x + ',' + c1.y + ' ' + c2.x + ',' + c2.y + ' ' + q.x + ',' + q.y;
   }
+  var pendingIns = null;
+  // střed Bézierovy křivky (t = 0.5)
+  function edgeMid(p, q) {
+    var k = Math.max(40, Math.min(160, Math.hypot(q.x - p.x, q.y - p.y) / 2));
+    var c1 = { x: p.x + (p.d === 'r' ? k : p.d === 'l' ? -k : 0), y: p.y + (p.d === 'b' ? k : p.d === 't' ? -k : 0) };
+    var c2 = { x: q.x + (q.d === 'r' ? k : q.d === 'l' ? -k : 0), y: q.y + (q.d === 'b' ? k : q.d === 't' ? -k : 0) };
+    return { x: Math.round((p.x + 3 * c1.x + 3 * c2.x + q.x) / 8), y: Math.round((p.y + 3 * c1.y + 3 * c2.y + q.y) / 8) };
+  }
+  // vloží nový uzel doprostřed existujícího spojení (A → B  ⇒  A → nový → B)
+  function insertOnEdge(eid) {
+    var e = S.edges.filter(function (x) { return x.id === eid; })[0]; if (!e) return;
+    var a = nodeById(e.from), b = nodeById(e.to); if (!a || !b) return;
+    var p = e.fs ? sidePoint(a, e.fs) : anchor(a, b), q = e.ts ? sidePoint(b, e.ts) : anchor(b, a), m = edgeMid(p, q);
+    var n = addNode(m.x - 70, m.y - 20, '', a.color || COLORS[0]);
+    S.edges = S.edges.filter(function (x) { return x.id !== eid; });
+    pendingIns = { nid: n.id, edge: e };
+    var e1 = addEdge(a.id, n.id, e.fs, null), e2 = addEdge(n.id, b.id, null, e.ts);
+    sel = { t: 'n', id: n.id }; renderAll();
+    // vystředění podle skutečné velikosti uzlu
+    var s = size(n); n.x = Math.round(m.x - s.w / 2); n.y = Math.round(m.y - s.h / 2); renderAll();
+    startEdit(n.id, true);
+  }
   function drawEdges() {
     var h = '<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7aa8ff"/></marker><marker id="ars" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#22e6ff"/></marker></defs>';
     S.edges.forEach(function (e) {
@@ -92,6 +114,7 @@
       var p = e.fs ? sidePoint(a, e.fs) : anchor(a, b), q = e.ts ? sidePoint(b, e.ts) : anchor(b, a), d = curve(p, q), on = sel && sel.t === 'e' && sel.id === e.id;
       h += '<path d="' + d + '" fill="none" stroke="' + (on ? '#22e6ff' : '#7aa8ff') + '" stroke-width="' + (on ? 3 : 2) + '" marker-end="url(#' + (on ? 'ars' : 'ar') + ')" opacity="' + (on ? 1 : .85) + '"/>';
       h += '<path class="eh" data-e="' + e.id + '" d="' + d + '" fill="none" stroke="transparent" stroke-width="16" style="pointer-events:stroke;cursor:pointer"/>';
+      if (on) { var m = edgeMid(p, q); h += '<g class="ei" data-e="' + e.id + '" style="pointer-events:all;cursor:pointer"><title>Vložit uzel doprostřed spojení</title><circle cx="' + m.x + '" cy="' + m.y + '" r="13" fill="#0b1630" stroke="#22e6ff" stroke-width="2"/><path d="M' + (m.x - 6) + ',' + m.y + ' H' + (m.x + 6) + ' M' + m.x + ',' + (m.y - 6) + ' V' + (m.y + 6) + '" stroke="#22e6ff" stroke-width="2.5" stroke-linecap="round"/></g>'; }
     });
     svg.innerHTML = h;
   }
@@ -148,7 +171,11 @@
     var n = nodeById(e.id), t = e.el; t.onblur = null; t.contentEditable = 'false'; var d = t.parentNode; if (d) d.classList.remove('edit');
     if (!n) return;
     var txt = ok ? String(t.innerText != null ? t.innerText : t.textContent || '').replace(/ /g, ' ').trim().slice(0, 2000) : e.old;
-    if (!txt && e.isNew) { S.nodes = S.nodes.filter(function (x) { return x.id !== n.id; }); S.edges = S.edges.filter(function (x) { return x.from !== n.id && x.to !== n.id; }); sel = null; renderAll(); if (hist.length) { /* nový prázdný uzel se do historie nezapisuje */ } return; }
+    if (!txt && e.isNew) { S.nodes = S.nodes.filter(function (x) { return x.id !== n.id; }); S.edges = S.edges.filter(function (x) { return x.from !== n.id && x.to !== n.id; }); sel = null;
+      // zrušené vložení doprostřed spojení → vrátit původní spojení
+      if (pendingIns && pendingIns.nid === n.id) { S.edges.push(pendingIns.edge); }
+      pendingIns = null; renderAll(); return; }
+    if (pendingIns && pendingIns.nid === n.id) pendingIns = null;
     var changedTxt = txt !== (e.old || '');
     n.text = txt; t.textContent = txt; drawEdges();
     if (changedTxt || e.isNew) commit();
@@ -185,6 +212,8 @@
       drag.nx = n.x; drag.ny = n.y;
       view.setPointerCapture(ev.pointerId); return;
     }
+    var ei = t.closest && t.closest('.ei');
+    if (ei) { ev.preventDefault(); insertOnEdge(ei.getAttribute('data-e')); return; }
     if (eh) { select({ t: 'e', id: eh.getAttribute('data-e') }); return; }
     if (nd) return;
     select(null);
@@ -231,7 +260,9 @@
   view.addEventListener('dblclick', function (ev) {
     var nd = ev.target.closest && ev.target.closest('.n');
     if (nd) { startEdit(nd.getAttribute('data-id'), false); return; }
-    if (ev.target.closest && (ev.target.closest('.eh') || ev.target.closest('#mb-empty'))) return;
+    var eh2 = ev.target.closest && ev.target.closest('.eh');
+    if (eh2) { insertOnEdge(eh2.getAttribute('data-e')); return; }
+    if (ev.target.closest && (ev.target.closest('.ei') || ev.target.closest('#mb-empty'))) return;
     var w = toWorld(ev.clientX, ev.clientY), n = addNode(w.x - 70, w.y - 20, '', COLORS[0]); sel = { t: 'n', id: n.id }; renderAll(); startEdit(n.id, true);
   });
   view.addEventListener('wheel', function (ev) {
