@@ -393,14 +393,16 @@ router.get('/trziste-prodeje', api(async (req, res) => {
   const radky = [];
   let zaplaceno = 0, prijato = 0;
   for (const m of prodeje) {
-    const klic = (m.name || m.spot_id);
+    // Celá věta, ne jen jméno: „Alnatura" je kus „Alnatura Super Natur Markt"
+    // a obě doručenky by se započítaly k jednomu prodeji.
+    const klic = 'prádlomat ' + (m.name || m.spot_id) + ' z tržiště';
     const kupujici = davky.filter((d) => d.player_id === m.koupil_id && d.amount < 0
       && String(d.popis || '').indexOf(klic) >= 0).reduce((a, d) => a + d.amount, 0);
     const prodavajici = davky.filter((d) => d.player_id === m.player_id && d.amount > 0
       && String(d.popis || '').indexOf(klic) >= 0).reduce((a, d) => a + d.amount, 0);
     zaplaceno += -kupujici; prijato += prodavajici;
     const sedi = Math.abs(-kupujici - m.cena) < 1 && Math.abs(prodavajici - m.cena) < 1;
-    radky.push((sedi ? '  ok  ' : '  !!  ') + (klic + '                         ').slice(0, 26)
+    radky.push((sedi ? '  ok  ' : '  !!  ') + ((m.name || m.spot_id) + '                         ').slice(0, 26)
       + ' cena ' + (kc(m.cena) + '            ').slice(0, 14)
       + ' kupující ' + (kc(kupujici) + '            ').slice(0, 14)
       + ' prodávající ' + (kc(prodavajici) + '            ').slice(0, 14)
