@@ -37,7 +37,7 @@
   // ── Výpočty ──
   function num(v) { if (v === '' || v == null) return null; var x = Number(String(v).replace(',', '.').replace(/[^\d.\-]/g, '')); return isFinite(x) ? Math.max(0, Math.min(100, Math.round(x * 100) / 100)) : null; }
   function fmt(x) { return x == null ? '' : String(x).replace('.', ','); }
-  var FREQ = [['', '—'], ['once', 'Jednorázově'], ['tx', 'Z každé transakce'], ['day', 'Denně'], ['week', 'Týdně'], ['month', 'Měsíčně'], ['quarter', 'Čtvrtletně'], ['half', 'Půlročně'], ['year', 'Ročně'], ['y5', 'Každých 5 let'], ['y10', 'Každých 10 let']];
+  var FREQ = [['', '—'], ['once', 'Jednorázově'], ['tx', 'Z každé transakce'], ['day', 'Denně'], ['week', 'Týdně'], ['month', 'Měsíčně'], ['month_unit', 'Měsíčně z prádlomatu'], ['quarter', 'Čtvrtletně'], ['half', 'Půlročně'], ['year', 'Ročně'], ['y5', 'Každých 5 let'], ['y10', 'Každých 10 let']];
   function freqSel(v) { return '<select class="fin">' + FREQ.map(function (f) { return '<option value="' + f[0] + '"' + ((v || '') === f[0] ? ' selected' : '') + '>' + f[1] + '</option>'; }).join('') + '</select>'; }
   function parseAmt(v) { if (v === '' || v == null) return null; var x = Number(String(v).replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '')); return isFinite(x) ? Math.min(1e12, Math.round(x * 100) / 100) : null; }
   function fmtAmt(x) { if (typeof x !== 'number') return ''; var p = x.toFixed(2).replace(/\.00$/, '').split('.'); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0'); return p.join(','); }
