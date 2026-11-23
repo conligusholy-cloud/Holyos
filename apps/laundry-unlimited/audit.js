@@ -59,6 +59,8 @@ const RULES = [
   [/^\/admin\/api\/users\/(\d+)\/delete$/, 'Uživatelé administrace', 'Smazání uživatele', 'user'],
   [/^\/admin\/api\/users\/(\d+)$/, 'Uživatelé administrace', 'Povolení / zakázání uživatele', 'user'],
   [/^\/admin\/api\/users$/, 'Uživatelé administrace', 'Nový uživatel', 'user'],
+  [/^\/admin\/api\/account\/password$/, 'Můj účet', 'Změna vlastního hesla', 'user'],
+  [/^\/admin\/api\/account\/profile$/, 'Můj účet', 'Úprava profilu', 'user'],
   [/^\/admin\/api\/finance$/, 'Rozdělení financí', 'Úprava tabulky', 'finance'],
   [/^\/admin\/api\/model\/boards\/(\d+)\/analyze$/, 'Modelace business modelu', 'AI rozbor mapy', 'board'],
   [/^\/admin\/api\/model\/boards\/(\d+)\/chat$/, 'Modelace business modelu', 'AI poradce (dotaz)', 'board'],

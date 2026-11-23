@@ -5,7 +5,7 @@
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var DAYS = 7, ROWS = [], T = null, timer = null;
   var fdt = function (d) { return new Date(d).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
-  var AREA_ICO = { 'Přihlášení': '🔑', 'Tasky': '✅', 'Leady': '👥', 'Rozdělení financí': '💶', 'Modelace business modelu': '🧩', 'Uživatelé administrace': '👤' };
+  var AREA_ICO = { 'Přihlášení': '🔑', 'Tasky': '✅', 'Leady': '👥', 'Rozdělení financí': '💶', 'Modelace business modelu': '🧩', 'Uživatelé administrace': '👤', 'Můj účet': '⚙️' };
 
   function ago(d) {
     var s = Math.max(0, Math.round((Date.now() - new Date(d).getTime()) / 1000));
