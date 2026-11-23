@@ -275,7 +275,9 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
     const lt = lLang ? (LAUNDRO_TXT[lLang] || LAUNDRO_TXT.en) : null;
     const site = lLang ? 'https://www.laundromats.eu' : 'https://pradlomaty.info';
     const pLink = noLink ? '' : (link && link.startsWith('http') ? link : site + (link || ''));
-    const bodyHtml = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
+    const inlineBtn = pLink ? `</div><div style="margin:18px 0 18px;"><a href="${escapeHtml(pLink)}" style="display:inline-block;padding:14px 28px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:10px;font-size:15px;font-weight:700;">${escapeHtml(linkLabel || 'Otevřít')}</a></div><div style="font-size:15px;line-height:1.7;color:#334867;">` : '';
+    // [[tlacitko]] v textu zprávy = tlačítko s odkazem na tomto místě (tolerantní k překladu značky)
+    const bodyHtml = body ? escapeHtml(body).replace(/(?:<br>|\n)*\[\[\s*(?:tlacitko|tlačítko|button|przycisk|knopf|gomb|buton|bottone|boton|bouton)\s*\]\](?:<br>|\n)*/gi, inlineBtn).replace(/\n/g, '<br>') : '';
     const brandTitle = lLang ? '💧 LAUNDROMATS 💧' : '💧 PRÁDLOMATY 💧';
     const brandSub = lt ? lt.sub : 'Samoobslužné prádelny';
     return `<!DOCTYPE html>
@@ -414,6 +416,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
   if (brand === 'game' && String(lang || '').toLowerCase().slice(0, 2) === 'en') brand = 'game:en';
   // Prádlomaty mimo Česko → značka LAUNDROMATS (hlavička šablony i jméno odesílatele)
   let unsubLabel = 'Odhlásit odběr';
+  if (String(brand || '').startsWith('laundromats:')) unsubLabel = (LAUNDRO_TXT[String(brand).split(':')[1]] || LAUNDRO_TXT.en).unsub;
   if (brand === 'pradlomaty') { const ll = laundroLang({ lang, from, link, body, subject }); if (ll) { brand = 'laundromats:' + ll; unsubLabel = (LAUNDRO_TXT[ll] || LAUNDRO_TXT.en).unsub; if (!fromName || /PR[ÁA]DLOMATY/i.test(fromName)) fromName = '💧 LAUNDROMATS 💧'; } }
   // manual: true = ruční odeslání tlačítkem uživatele (např. IT dotazník / Nayax v detailu objednávky) → pauza se neuplatní
   if (audience === 'customer' && !manual && await isCustomerMailPaused()) {
@@ -428,7 +431,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
       // unsubscribe: false = bez patičky, string s https = vlastní odhlašovací odkaz (rozesílky BS2 mají svůj seznam vyřazených)
       const unsubUrl = unsubscribe === false ? null : (typeof unsubscribe === 'string' && /^https:\/\//.test(unsubscribe) ? unsubscribe : EL.unsubscribeUrl(to));
       let html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, noLink, brand, trackingPixel, flyerUrl, rawHtml, buttons });
-      if (unsubUrl) html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#8ea2c2;padding:10px 0 18px"><a href="' + unsubUrl + '" style="color:#8ea2c2;text-decoration:underline">' + escapeHtml(unsubLabel) + '</a></div></body>');
+      if (unsubUrl) html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#6b7d99;padding:10px 0 18px"><a href="' + unsubUrl + '" style="color:#6b7d99;text-decoration:underline">' + escapeHtml(unsubLabel) + '</a></div></body>');
       const fa = parseAddrLite(sf); const fromHeader = fromName ? '"' + String(fromName).replace(/"/g, '') + '" <' + fa.address + '>' : sf;
       const r = await M.sendEmail({ to, subject, html, from: fromHeader, replyTo, inlineImages: [], attachments }); await EL.logMessage(r, { to, subject, campaignId: campaignId || (brand ? 'brand:' + brand : null), leadId });
       if (r.ok) { console.log('[Email] odesláno přes Amazon SES → ' + to + (r.simulated ? ' (simulace)' : '')); return { sent: true, via: 'ses', from: fa.address, messageId: r.messageId, sesMessageId: r.sesMessageId, simulated: !!r.simulated }; }
@@ -510,4 +513,4 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
   }
 }
 
-module.exports = { sendMail, renderEmailHtml, isCustomerMailPaused, CUSTOMER_MAIL_PAUSE_KEY, getGateway, testGateway, GATEWAY_KEY };
+module.exports = { sendMail, renderEmailHtml, LAUNDRO_TXT, isCustomerMailPaused, CUSTOMER_MAIL_PAUSE_KEY, getGateway, testGateway, GATEWAY_KEY };

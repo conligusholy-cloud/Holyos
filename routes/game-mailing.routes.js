@@ -232,7 +232,9 @@ router.post('/preview', wrap(async (req, res) => {
   const tx = GM.pickText(c, vl, st.subject || c.subject || '', st.body || '');
   const vars = SAMPLE(); if (vl !== 'cs') vars.osloveni = vars.jmeno;
   const link = c.link || undefined, subject = GM.render(tx.subject, vars);
-  const html = require('../services/email').renderEmailHtml({ title: subject, body: GM.render(tx.body, vars), link, linkLabel: link ? (tx.link_label || 'Otevřít') : undefined, noLink: !link, brand: 'laundromats:' + vl, flyerUrl: c.image_url || undefined });
+  const EM = require('../services/email');
+  let html = EM.renderEmailHtml({ title: subject, body: GM.render(tx.body, vars), link, linkLabel: link ? (tx.link_label || 'Otevřít') : undefined, noLink: !link, brand: 'laundromats:' + vl, flyerUrl: c.image_url || undefined });
+  html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#6b7d99;padding:10px 0 18px"><a href="#" style="color:#6b7d99;text-decoration:underline">' + ((EM.LAUNDRO_TXT[vl] || EM.LAUNDRO_TXT.en).unsub) + '</a></div></body>');
   res.json({ html, subject, lang: vl, translations: c.translations || {}, from: (c.from_name || 'Laundromats') + (GM.fromOf(c) ? ' <' + GM.fromOf(c) + '>' : '') });
 }));
 router.post('/test-draft', wrap(async (req, res) => {
