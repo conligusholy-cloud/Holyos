@@ -8932,6 +8932,17 @@ function splatitUverSheet(id) {
   $('sp-go').onclick = function () {
     var dal = splatitUver(id, Number(i.value) || 0);
     if (!dal) return toast(esc(tx('hra.zadej_castku_kterou_mas')), 'err');
+    // Co zbylo, se musí říct rovnou. Hlášku „Splaceno 27 635 171" po splátce
+    // většího úvěru četli hráči jako „úvěr je pryč" a pak se ptali, proč jim
+    // v bance pořád svítí. Zbytek se čte z úvěru PO splátce — když ho
+    // splatitUver() dopočítalo do nuly, v seznamu už není.
+    var zbyl = (S.loans || []).filter(function (x) { return x.id === id; })[0];
+    var zbyva = zbyl ? Math.round(zbyl.zbyva) : 0;
+    var hlaska = function () {
+      return zbyva > 0
+        ? tx('veta.splaceno_zbyva', { p1: dal, p2: zbyva })
+        : tx('veta.splaceno_uver_doplacen', { p1: dal });
+    };
     save(); paint(); paintBank(); closeSheet();
     // „Splaceno" se řekne až když to opravdu drží. Když zatím vyhraje hra
     // otevřená jinde, splátka propadne i s penězi — a hráč by jinak zůstal
@@ -8942,8 +8953,8 @@ function splatitUverSheet(id) {
         paint(); paintBank();
         return toast(esc(tx('hra.splatka_neprosla_jinde')), 'err', true);
       }
-      toast(tx('veta.splaceno_2', { p1: kcFull(dal) }), 'ok');
-    }).catch(function () { toast(tx('veta.splaceno_2', { p1: kcFull(dal) }), 'ok'); });
+      toast(hlaska(), 'ok');
+    }).catch(function () { toast(hlaska(), 'ok'); });
   };
 }
 // Panel: vyjednání delší splatnosti u běžícího úvěru.
@@ -9085,7 +9096,9 @@ function paintBank() {
     var pay = Math.min(S.cash, S.loan);
     S.cash -= pay; splatitDluh(pay); S.bank = Math.min(bankCap(), S.bank + pay);
     zapis('splatka', tx('banka.doplaceni'), -pay);
-    save(); paint(); syncState(true); toast(tx('banka.splaceno', { kolik: pay }), 'ok');
+    save(); paint(); syncState(true);
+    toast(S.loan > 0 ? tx('veta.splaceno_zbyva', { p1: pay, p2: Math.round(S.loan) })
+      : tx('veta.splaceno_uver_doplacen', { p1: pay }), 'ok');
   };
 }
 // Klepnutí na hotovost v hlavičce. Když peníze dojdou, hráč nemá hledat,
@@ -9112,7 +9125,9 @@ function penizeSheet() {
     var pay = Math.min(S.cash, S.loan);
     S.cash -= pay; splatitDluh(pay); S.bank = Math.min(bankCap(), S.bank + pay);
     zapis('splatka', esc(tx('hra.doplaceni_uveru')), -pay);
-    save(); paint(); syncState(true); closeSheet(); toast(tx('veta.splaceno', { p1: kcFull(pay) }), 'ok');
+    save(); paint(); syncState(true); closeSheet();
+    toast(S.loan > 0 ? tx('veta.splaceno_zbyva', { p1: pay, p2: Math.round(S.loan) })
+      : tx('veta.splaceno_uver_doplacen', { p1: pay }), 'ok');
   };
   var ba = $('pen-balicek');
   if (ba) ba.onclick = function () { closeSheet(); switchTab('bank'); };

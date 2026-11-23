@@ -3853,6 +3853,8 @@
   "veta.span_div_div_class_kv_span": " %</span></div><div class=\"kv\"><span>{p1}</span><b>{p2}</b></div><div class=\"kv\"><span>{p3}</span><b class=\"warn\">{p4} <span class=\"muted\">(úrok {p5})</span></b></div><div class=\"kv\"><span>{p6}</span><b>",
   "veta.splaceno": "Splaceno {p1}.",
   "veta.splaceno_2": "Splaceno {p1}.",
+  "veta.splaceno_uver_doplacen": "Splaceno {penize:p1} — úvěr je doplacený.",
+  "veta.splaceno_zbyva": "Splaceno {penize:p1}. Na úvěru zbývá {penize:p2}.",
   "veta.splaci_se_anuitne_kazdy_herni_mesic": "Splácí se anuitně každý herní měsíc, tedy každých dvanáct hodin. Se zástavou propadá prádlomat hned při první nezaplacené splátce. Bez zástavy má dlužník tři pokusy a pak mu dluh spadne do banky.",
   "veta.splatka_by_vysla_na": "Splátka by vyšla na {p1}",
   "veta.splatka_klesne_hned_ale_uver_pobezi": "Splátka klesne hned, ale úvěr poběží {p1} měsíců místo {p2}. Banka na tom vydělá — proto ti to ráda dá.",

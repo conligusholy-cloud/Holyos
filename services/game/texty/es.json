@@ -3820,6 +3820,8 @@
   "veta.span_div_div_class_kv_span": " %</span></div><div class=\"kv\"><span>{p1}</span><b>{p2}</b></div><div class=\"kv\"><span>{p3}</span><b class=\"warn\">{p4} <span class=\"muted\">(intereses {p5})</span></b></div><div class=\"kv\"><span>{p6}</span><b>",
   "veta.splaceno": "Pagado {p1}.",
   "veta.splaceno_2": "Pagado {p1}.",
+  "veta.splaceno_uver_doplacen": "Pagado {penize:p1}: el préstamo está liquidado.",
+  "veta.splaceno_zbyva": "Pagado {penize:p1}. Quedan {penize:p2} del préstamo.",
   "veta.splaci_se_anuitne_kazdy_herni_mesic": "Se paga con cuotas cada mes de juego, es decir cada doce horas. Con garantía, la lavandería se pierde al primer impago. Sin garantía, el deudor tiene tres intentos y luego la deuda cae al banco.",
   "veta.splatka_by_vysla_na": "La cuota saldría en {p1}",
   "veta.splatka_klesne_hned_ale_uver_pobezi": "La cuota bajará enseguida, pero el préstamo durará {p1} meses en lugar de {p2}. El banco gana con eso — por eso te lo da con gusto.",

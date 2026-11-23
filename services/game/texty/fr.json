@@ -3820,6 +3820,8 @@
   "veta.span_div_div_class_kv_span": " %</span></div><div class=\"kv\"><span>{p1}</span><b>{p2}</b></div><div class=\"kv\"><span>{p3}</span><b class=\"warn\">{p4} <span class=\"muted\">(intérêts {p5})</span></b></div><div class=\"kv\"><span>{p6}</span><b>",
   "veta.splaceno": "Remboursé {p1}.",
   "veta.splaceno_2": "Remboursé {p1}.",
+  "veta.splaceno_uver_doplacen": "{penize:p1} remboursés — le prêt est soldé.",
+  "veta.splaceno_zbyva": "{penize:p1} remboursés. Il reste {penize:p2} sur le prêt.",
   "veta.splaci_se_anuitne_kazdy_herni_mesic": "Le remboursement se fait par mensualités chaque mois de jeu, donc toutes les douze heures. Avec garantie, la laverie est saisie dès la première mensualité impayée. Sans garantie, le débiteur a trois tentatives, puis sa dette tombe à la banque.",
   "veta.splatka_by_vysla_na": "La mensualité serait de {p1}",
   "veta.splatka_klesne_hned_ale_uver_pobezi": "La mensualité baisse tout de suite, mais le crédit durera {p1} mois au lieu de {p2}. La banque y gagne — c'est pourquoi elle accepte volontiers.",

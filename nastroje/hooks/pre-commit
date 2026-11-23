@@ -227,6 +227,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js'; th
   fi
 fi
 
+# Mimořádná splátka musí říct, co zbylo. „Splaceno 27 635 171" u úvěru za
+# 67 milionů se čte jako „úvěr je pryč".
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|services/game/texty/'; then
+  if ! node nastroje/tsplatkahlaska.js; then
+    echo ""
+    echo "STOP: hláška po mimořádné splátce nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Nákup hotové provozovny z tržiště. Spoluúčast je minimum banky, ne to,
 # kolik má hráč zaplatit — jinak si bere maximální úvěr i ten, kdo má cenu
 # v hotovosti, a vypadá to, že zaplatil dvakrát.

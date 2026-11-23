@@ -3813,6 +3813,8 @@
   "veta.span_div_div_class_kv_span": " %</span></div><div class=\"kv\"><span>{p1}</span><b>{p2}</b></div><div class=\"kv\"><span>{p3}</span><b class=\"warn\">{p4} <span class=\"muted\">(juros {p5})</span></b></div><div class=\"kv\"><span>{p6}</span><b>",
   "veta.splaceno": "Pago {p1}.",
   "veta.splaceno_2": "Pago {p1}.",
+  "veta.splaceno_uver_doplacen": "Pago {penize:p1} — o empréstimo está liquidado.",
+  "veta.splaceno_zbyva": "Pago {penize:p1}. Faltam {penize:p2} do empréstimo.",
   "veta.splaci_se_anuitne_kazdy_herni_mesic": "Pagamento em parcelas fixas todo mês de jogo, ou seja, a cada doze horas. Com garantia, a lavanderia é perdida logo na primeira parcela não paga. Sem garantia, o devedor tem três tentativas e depois a dívida vai para o banco.",
   "veta.splatka_by_vysla_na": "A parcela ficaria em {p1}",
   "veta.splatka_klesne_hned_ale_uver_pobezi": "A parcela cai agora, mas o empréstimo dura {p1} meses em vez de {p2}. O banco ganha com isso — por isso aprova fácil.",

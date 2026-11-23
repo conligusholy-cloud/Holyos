@@ -3820,6 +3820,8 @@
   "veta.span_div_div_class_kv_span": "%</span></div><div class=\"kv\"><span>{p1}</span><b>{p2}</b></div><div class=\"kv\"><span>{p3}</span><b class=\"warn\">{p4} <span class=\"muted\">(interest {p5})</span></b></div><div class=\"kv\"><span>{p6}</span><b>",
   "veta.splaceno": "Paid off {p1}.",
   "veta.splaceno_2": "Paid off {p1}.",
+  "veta.splaceno_uver_doplacen": "Paid {penize:p1} — the loan is cleared.",
+  "veta.splaceno_zbyva": "Paid {penize:p1}. {penize:p2} still outstanding on the loan.",
   "veta.splaci_se_anuitne_kazdy_herni_mesic": "Repaid as annuity every game month, meaning every twelve hours. With collateral, the laundromat defaults on the first missed instalment. Without collateral, borrower gets three tries, then the debt goes to the bank.",
   "veta.splatka_by_vysla_na": "Instalment would be {p1}",
   "veta.splatka_klesne_hned_ale_uver_pobezi": "Instalment drops now, but the loan runs {p1} months instead of {p2}. The bank profits — that's why they're happy to do it.",

@@ -3827,6 +3827,8 @@
   "veta.span_div_div_class_kv_span": " %</span></div><div class=\"kv\"><span>{p1}</span><b>{p2}</b></div><div class=\"kv\"><span>{p3}</span><b class=\"warn\">{p4} <span class=\"muted\">(odsetki {p5})</span></b></div><div class=\"kv\"><span>{p6}</span><b>",
   "veta.splaceno": "Spłacono {p1}.",
   "veta.splaceno_2": "Spłacono {p1}.",
+  "veta.splaceno_uver_doplacen": "Spłacono {penize:p1} — kredyt jest zamknięty.",
+  "veta.splaceno_zbyva": "Spłacono {penize:p1}. Na kredycie zostaje {penize:p2}.",
   "veta.splaci_se_anuitne_kazdy_herni_mesic": "Spłaca się annuitetowo co miesiąc w grze, czyli co dwanaście godzin. Z zastawem pralnia przepada od razu przy pierwszej niezapłaconej racie. Bez zastawu dłużnik ma trzy próby, a potem dług mu spada do banku.",
   "veta.splatka_by_vysla_na": "Rata wyszłaby na {p1}",
   "veta.splatka_klesne_hned_ale_uver_pobezi": "Rata spadnie od razu, ale kredyt będzie biegł {p1} miesięcy zamiast {p2}. Bank na tym zarobi — dlatego chętnie ci to da.",
