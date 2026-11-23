@@ -264,6 +264,43 @@ const verejny = (t, me, F) => ({
   na_tahu: t.to_id === me && t.stav === 'ceka',
 });
 
+// Místo a dluh u čekajících nabídek prádlomatu se dopisují až při čtení.
+// Do nabídky se sice zapisují při jejím vzniku, ale to nestačí: nabídka
+// vyvěšená dřív, než se to začalo zapisovat, by zůstala navždycky němá —
+// a u té, co čeká týden, se mezitím mohl změnit nájem i dluh. Ptáme se
+// na všechny najednou, ne jednou za každou nabídku.
+async function dopisMista(trades) {
+  const ceka = trades.filter((t) => t.predmet === 'pradlomat' && t.spot_id && t.stav === 'ceka');
+  if (!ceka.length) return;
+  const idy = [...new Set(ceka.map((t) => t.spot_id))];
+  const claims = await prisma.gameSpotClaim.findMany({ where: { spot_id: { in: idy } } });
+  if (!claims.length) return;
+  const [majitele, pujcky] = await Promise.all([
+    prisma.gamePlayer.findMany({ where: { id: { in: [...new Set(claims.map((c) => c.player_id))] } },
+      select: { id: true, state: true } }),
+    prisma.gameLoan.findMany({ where: { zastava_spot: { in: idy }, stav: 'bezi' } }),
+  ]);
+  const stavy = new Map(majitele.map((h) => [h.id, h.state || {}]));
+  const podle = new Map();
+  claims.forEach((c) => {
+    const zastava = pujcky
+      .filter((pj) => pj.zastava_spot === c.spot_id && pj.borrower_id === c.player_id)
+      .reduce((a, pj) => a + DLUH.doplatek(pj), 0);
+    podle.set(c.spot_id, { c, banka: DLUH.banka(stavy.get(c.player_id) || {}, c.spot_id), zastava });
+  });
+  ceka.forEach((t) => {
+    const x = podle.get(t.spot_id);
+    if (!x) return;
+    t.data = Object.assign({}, t.data || {}, {
+      dluh: x.banka + x.zastava, dluh_banka: x.banka, dluh_zastava: x.zastava,
+      misto: { name: x.c.name || null, model: x.c.model || null, area_key: x.c.area_key || null,
+        score: x.c.score == null ? null : x.c.score,
+        rent: Math.max(0, Math.round(x.c.rent || 0)),
+        lat: x.c.lat == null ? null : x.c.lat, lon: x.c.lon == null ? null : x.c.lon,
+        pozemek: !!x.c.pozemek, cizi_zem: !!x.c.pozemek_majitel_id } });
+  });
+}
+
 // GET /trade/list → všechno, co se mě týká
 router.get('/trade/list', hrac, api(async (req, res) => {
   const me = req.player.id;
@@ -272,7 +309,9 @@ router.get('/trade/list', hrac, api(async (req, res) => {
     orderBy: { created_at: 'desc' }, take: 120,
   });
   const F = await firmyPro(rows);
-  res.json({ ok: true, trades: rows.map((t) => verejny(t, me, F)),
+  const trades = rows.map((t) => verejny(t, me, F));
+  await dopisMista(trades);
+  res.json({ ok: true, trades,
     ceka_na_me: rows.filter((t) => t.to_id === me && t.stav === 'ceka').length });
 }));
 
@@ -683,6 +722,29 @@ router.post('/trade/:id/counter', hrac, api(async (req, res) => {
   // Podmínky půjčky a podílu jdou s předmětem — jinak by protinávrh udělal
   // z dvacetiprocentní půjčky na rok bezúročnou na měsíc.
   let data = t.data || null;
+  // U prádlomatu se místo i dluh počítají znovu. Protinávrh je nová nabídka
+  // za novou cenu a mezitím mohl přibýt úvěr; a nabídky vyvěšené dřív, než
+  // se tohle začalo zapisovat, by si přes protinávrh nesly prázdno dál —
+  // kupující by zase koukal na holé „prádlomat na místě".
+  if (t.predmet === 'pradlomat') {
+    // Věc má pořád tentýž hráč, ať se směr prohodí jakkoli: u „koupim"
+    // ji má příjemce (tedy já), u „prodam" odesílatel.
+    const majitel = t.smer === 'koupim' ? req.player
+      : await prisma.gamePlayer.findUnique({ where: { id: t.from_id } });
+    if (majitel) {
+      const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: t.spot_id || '' } });
+      const dl = await DLUH.naMiste(prisma, majitel, t.spot_id);
+      data = Object.assign({}, data || {}, { dluh: dl.celkem,
+        dluh_banka: dl.banka, dluh_zastava: dl.zastava },
+        c ? { misto: {
+          name: c.name || null, model: c.model || null, area_key: c.area_key || null,
+          score: c.score == null ? null : c.score,
+          rent: Math.max(0, Math.round(c.rent || 0)),
+          lat: c.lat == null ? null : c.lat, lon: c.lon == null ? null : c.lon,
+          pozemek: !!c.pozemek, cizi_zem: !!c.pozemek_majitel_id,
+        } } : {});
+    }
+  }
   if (t.predmet === 'pujcka') {
     const d = Object.assign({}, data || {});
     if (cena < PUJCKA_MIN) {

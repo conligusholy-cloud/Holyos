@@ -249,8 +249,10 @@ function hra() {
 function coSeNabizi() {
   console.log('\nCo se vlastně nabízí');
   // Server musí k nabídce i k dražbě zapsat místo.
-  ma((TRADE.match(/misto: \{/g) || []).length >= 2, 'místo se ukládá k nabídce i k dražbě',
-    (TRADE.match(/misto: \{/g) || []).length + '×');
+  // Čtyři místa, kde se místo skládá: nabídka, protinávrh, dražba a dopsání
+  // při čtení seznamu. Když jedno vypadne, kupující zase kouká na prázdno.
+  ma((TRADE.match(/misto: \{/g) || []).length === 4, 'místo se skládá na všech čtyřech cestách',
+    (TRADE.match(/misto: \{/g) || []).length + ' ze 4');
   // Oba zápisy místa musí nést všechno, co kupující potřebuje.
   const bloky = [];
   let od = -1;
@@ -261,14 +263,15 @@ function coSeNabizi() {
       else if (TRADE[j] === '}') { h--; if (!h) { bloky.push(TRADE.slice(od, j + 1)); break; } }
     }
   }
-  ma(bloky.length === 2, 'našly se oba zápisy místa', bloky.length);
+  ma(bloky.length === 4, 'našly se všechny zápisy místa', bloky.length);
   // A nabídka si to opravdu bere z evidence míst, ne odnikud.
   ma(/predmet === 'pradlomat'[\s\S]{0,400}gameSpotClaim\.findUnique[\s\S]{0,500}\bc \? \{ misto: \{/.test(TRADE),
     'nabídka čte místo z evidence a bez něj ho nevymýšlí');
   bloky.forEach((b, i) => {
     const chybi = ['name', 'model', 'area_key', 'score', 'rent', 'lat', 'lon', 'pozemek', 'cizi_zem']
       .filter((pole) => !new RegExp('\\b' + pole + ':').test(b));
-    ma(!chybi.length, (i ? 'dražba' : 'nabídka') + ': jde ven všechno', chybi.join(', ') || '9 údajů');
+    ma(!chybi.length, ['nabídka', 'protinávrh', 'dražba', 'seznam'][i] + ': jde ven všechno',
+      chybi.join(', ') || '9 údajů');
   });
 
   const ctx = vm.createContext({ Math, Number, String, console,
@@ -311,6 +314,74 @@ function coSeNabizi() {
   ma(/data-trmapa\]/.test(HRA), 'a odkaz na mapu je napojený');
 }
 
+// ─── 5c. Čekající nabídky se dopisují při čtení ─────────────────────────────
+async function priCteni() {
+  console.log('\nStaré nabídky se dopíšou při čtení');
+  const src = telo(TRADE, 'dopisMista');
+  const claims = [{ spot_id: 'hk-1', player_id: 1, name: 'U Nemocnice', model: 'max',
+    area_key: 'hradec-kralove', score: 88, rent: 12500, lat: 50.2, lon: 15.8,
+    pozemek: false, pozemek_majitel_id: null }];
+  const hraci = [{ id: 1, state: { loans: [{ spotId: 'hk-1', zbyva: 900000 }] } }];
+  const pujcky = [{ zastava_spot: 'hk-1', borrower_id: 1, stav: 'bezi',
+    mesicu: 4, splaceno: 0, splatka: 25000, urok: 0 },
+    // Zástava po předchozím majiteli místa — na dnešním vlastníkovi nevázne.
+    { zastava_spot: 'hk-1', borrower_id: 99, stav: 'bezi',
+      mesicu: 10, splaceno: 0, splatka: 500000, urok: 0 }];
+  const dotazy = [];
+  let ptalSeNa = [];
+  const prisma = {
+    gameSpotClaim: { findMany: async (q) => { dotazy.push('claim');
+      ptalSeNa = q.where.spot_id.in.slice();
+      return claims.filter((c) => q.where.spot_id.in.indexOf(c.spot_id) >= 0); } },
+    gamePlayer: { findMany: async () => { dotazy.push('hraci'); return hraci; } },
+    gameLoan: { findMany: async () => { dotazy.push('pujcky'); return pujcky; } },
+  };
+  const ctx = vm.createContext({ prisma, DLUH, Math, Number, Set, Map, Object, Promise, console });
+  vm.runInContext(src + '\nthis.F = dopisMista;', ctx);
+  const F = ctx.F;
+
+  const nabidky = [
+    { predmet: 'pradlomat', spot_id: 'hk-1', stav: 'ceka', data: null },
+    { predmet: 'pradlomat', spot_id: 'hk-1', stav: 'prijato', data: null },
+    { predmet: 'karta', spot_id: null, stav: 'ceka', data: null },
+    { predmet: 'pradlomat', spot_id: 'hk-pryc', stav: 'ceka', data: null },
+    // Dvě čekající nabídky na totéž místo — server se smí zeptat jednou.
+    { predmet: 'pradlomat', spot_id: 'hk-1', stav: 'ceka', data: null },
+  ];
+  await F(nabidky);
+  const m = (nabidky[0].data || {}).misto;
+  ma(!!m, 'nabídka bez zapsaného místa ho dostane při čtení');
+  ma(m && m.name === 'U Nemocnice' && m.model === 'max', 'a je to to správné místo');
+  ma(m && m.rent === 12500 && m.score === 88, 'i s nájmem a skóre');
+  ma(nabidky[0].data.dluh === 1000000, 'dluh je banka i zástava dohromady',
+    nabidky[0].data && nabidky[0].data.dluh);
+  ma(nabidky[0].data.dluh_banka === 900000 && nabidky[0].data.dluh_zastava === 100000,
+    'a je vidět, co je co');
+  ma(nabidky[1].data === null, 'uzavřená nabídka se nepřepisuje');
+  ma(nabidky[2].data === null, 'karta se nepřepisuje');
+  ma(nabidky[3].data === null, 'místo, které zmizelo, nic nevymyslí');
+  ma(dotazy.filter((x) => x === 'claim').length === 1, 'ptá se jednou za všechny, ne za každou',
+    dotazy.join(', '));
+  ma(ptalSeNa.length === new Set(ptalSeNa).size, 'a na totéž místo se neptá dvakrát',
+    ptalSeNa.join(', '));
+  ma(nabidky[4].data && nabidky[4].data.misto, 'druhá nabídka na totéž místo ho dostane taky');
+  ma(nabidky[0].data.dluh_zastava === 100000,
+    'zástava po předchozím majiteli se nezapočítá', nabidky[0].data.dluh_zastava);
+
+  // Bez čekající nabídky prádlomatu se server neptá vůbec.
+  dotazy.length = 0;
+  await F([{ predmet: 'karta', stav: 'ceka', data: null }]);
+  ma(!dotazy.length, 'bez prádlomatu se do databáze nesahá');
+  await F([]);
+  ma(true, 'prázdný seznam nic neshodí');
+
+  ma(/const trades = rows\.map\(\(t\) => verejny\(t, me, F\)\);[\s\S]{0,80}await dopisMista\(trades\)/.test(TRADE),
+    'seznam nabídek to volá');
+  // Protinávrh je nová nabídka — musí si místo i dluh spočítat znovu.
+  ma(/t\.predmet === 'pradlomat'[\s\S]{0,600}DLUH\.naMiste\(prisma, majitel, t\.spot_id\)/.test(TRADE),
+    'protinávrh počítá místo i dluh znovu');
+}
+
 // ─── 6. Texty ───────────────────────────────────────────────────────────────
 function texty() {
   console.log('\nTexty ve všech jazycích');
@@ -334,6 +405,7 @@ function texty() {
   obeCesty();
   hra();
   coSeNabizi();
+  await priCteni();
   texty();
   console.log(chyb ? '\n' + chyb + ' CHYB' : '\nVšechno sedí.');
   process.exit(chyb ? 1 : 0);
