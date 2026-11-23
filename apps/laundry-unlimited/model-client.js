@@ -71,6 +71,8 @@
     S.nodes.forEach(function (n) {
       var d = document.createElement('div'); d.className = 'n' + (sel && sel.t === 'n' && sel.id === n.id ? ' sel' : ''); d.setAttribute('data-id', n.id);
       d.style.left = n.x + 'px'; d.style.top = n.y + 'px'; d.style.setProperty('--c', n.color || COLORS[0]);
+      if (n.w || n.h) { d.classList.add('sized'); if (n.w) d.style.width = n.w + 'px'; if (n.h) d.style.height = n.h + 'px'; }
+      ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(function (r) { var z = document.createElement('b'); z.className = 'rz rz-' + r; z.setAttribute('data-r', r); d.appendChild(z); });
       var t = document.createElement('div'); t.className = 't'; t.textContent = n.text || ''; d.appendChild(t);
       ['t', 'r', 'b', 'l'].forEach(function (sd) { var h = document.createElement('i'); h.className = 'h h-' + sd; h.setAttribute('data-s', sd); h.title = 'Přetáhni na jiný uzel (nebo do prázdna) pro spojení'; d.appendChild(h); });
       nodesEl.appendChild(d);
@@ -210,6 +212,12 @@
     if (h && nd) {
       var id = nd.getAttribute('data-id'); drag = { type: 'link', from: id, side: h.getAttribute('data-s') || 'r' }; view.setPointerCapture(ev.pointerId); ev.preventDefault(); select({ t: 'n', id: id }); return;
     }
+    var rz = t.closest && t.closest('.rz');
+    if (rz && nd && !nd.classList.contains('edit')) {
+      var rid = nd.getAttribute('data-id'), rn = nodeById(rid), rs = size(rn); select({ t: 'n', id: rid });
+      drag = { type: 'resize', id: rid, dir: rz.getAttribute('data-r'), sx: ev.clientX, sy: ev.clientY, x0: rn.x, y0: rn.y, w0: rs.w, h0: rs.h, hadW: !!rn.w, hadH: !!rn.h, moved: false };
+      view.setPointerCapture(ev.pointerId); ev.preventDefault(); return;
+    }
     if (nd && !nd.classList.contains('edit')) {
       var id2 = nd.getAttribute('data-id'), n = nodeById(id2); select({ t: 'n', id: id2 });
       var w = toWorld(ev.clientX, ev.clientY); drag = { type: 'move', id: id2, ox: w.x - n.x, oy: w.y - n.y, moved: false, sx: ev.clientX, sy: ev.clientY, kids: [] };
@@ -231,6 +239,22 @@
   view.addEventListener('pointermove', function (ev) {
     if (!drag) return;
     if (drag.type === 'pan') { V.x = drag.vx + ev.clientX - drag.sx; V.y = drag.vy + ev.clientY - drag.sy; applyView(); }
+    else if (drag.type === 'resize') {
+      var dx0 = (ev.clientX - drag.sx) / V.k, dy0 = (ev.clientY - drag.sy) / V.k;
+      if (!drag.moved && Math.hypot(dx0, dy0) < 2) return; drag.moved = true;
+      var rn2 = nodeById(drag.id), dr = drag.dir, W = drag.w0, H = drag.h0, X = drag.x0, Y = drag.y0;
+      if (dr.indexOf('e') >= 0) W = Math.max(60, drag.w0 + dx0);
+      if (dr.indexOf('w') >= 0) { W = Math.max(60, drag.w0 - dx0); X = drag.x0 + drag.w0 - W; }
+      if (dr.indexOf('s') >= 0) H = Math.max(34, drag.h0 + dy0);
+      if (dr.indexOf('n') >= 0) { H = Math.max(34, drag.h0 - dy0); Y = drag.y0 + drag.h0 - H; }
+      var horiz = /[ew]/.test(dr), vert = /[ns]/.test(dr);
+      rn2.x = Math.round(X); rn2.y = Math.round(Y);
+      if (horiz || drag.hadW) rn2.w = Math.round(horiz ? W : drag.w0);
+      if (vert || drag.hadH) rn2.h = Math.round(vert ? H : drag.h0);
+      var re = elOf(rn2.id); re.classList.add('sized'); re.style.left = rn2.x + 'px'; re.style.top = rn2.y + 'px';
+      re.style.width = rn2.w ? rn2.w + 'px' : ''; re.style.height = rn2.h ? rn2.h + 'px' : '';
+      drawEdges();
+    }
     else if (drag.type === 'move') {
       if (!drag.moved && Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy) < 4) return; drag.moved = true;
       var n = nodeById(drag.id), w = toWorld(ev.clientX, ev.clientY); n.x = Math.round(w.x - drag.ox); n.y = Math.round(w.y - drag.oy);
@@ -251,7 +275,7 @@
     if (!drag) return; var d = drag; drag = null; view.classList.remove('pan');
     try { view.releasePointerCapture(ev.pointerId); } catch (e) { /* už uvolněno */ }
     nodesEl.querySelectorAll('.n').forEach(function (x) { x.classList.remove('tgt'); });
-    if (d.type === 'move' && d.moved) commit();
+    if ((d.type === 'move' || d.type === 'resize') && d.moved) commit();
     else if (d.type === 'link') {
       var under = document.elementFromPoint(ev.clientX, ev.clientY), un = under && under.closest && under.closest('.n');
       if (un && un.getAttribute('data-id') !== d.from) { if (addEdge(d.from, un.getAttribute('data-id'), d.side, nearestSide(un, ev.clientX, ev.clientY))) { renderAll(); commit(); } else drawEdges(); }
