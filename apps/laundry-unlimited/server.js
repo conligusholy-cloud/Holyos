@@ -925,7 +925,12 @@ const finClean = (d) => {
   if (m && typeof m === 'object') {
     const vol = {};
     Object.keys(m.vol || {}).forEach((cid) => { if (!ids.has(cid) || !m.vol[cid] || typeof m.vol[cid] !== 'object') return; vol[cid] = {}; Object.keys(m.vol[cid]).forEach((rid) => { const x = Number(m.vol[cid][rid]); if (rowIds.has(rid) && isFinite(x) && x >= 0) vol[cid][rid] = Math.min(1e9, Math.round(x * 10000) / 10000); }); });
-    model = { sel: Array.isArray(m.sel) ? m.sel.map(String).filter((x) => ids.has(x)) : null, vol };
+    // 10letý výhled: nové prádlomaty a noví operátoři v jednotlivých letech + transakce / měsíc na prádlomat
+    const pl = m.plan && typeof m.plan === 'object' ? m.plan : {};
+    const yr = (a) => Array.from({ length: 10 }, (_, i) => { const x = Array.isArray(a) && a[i] != null && a[i] !== '' ? Number(a[i]) : null; return x != null && isFinite(x) && x >= 0 ? Math.min(1e6, Math.round(x * 100) / 100) : null; });
+    const tm = pl.txm != null && pl.txm !== '' ? Number(pl.txm) : null;
+    const plan = { pr: yr(pl.pr), op: yr(pl.op), txm: tm != null && isFinite(tm) && tm >= 0 ? Math.min(1e7, tm) : null };
+    model = { sel: Array.isArray(m.sel) ? m.sel.map(String).filter((x) => ids.has(x)) : null, vol, plan };
   }
   return { cols, rows, model };
 };
@@ -976,7 +981,12 @@ const FIN_CSS = `
 .mk{font-size:14px;color:#9fb4d6;text-align:right}.mk b{font-size:20px;color:#86efac;font-variant-numeric:tabular-nums}.mu2{margin:0 4px;color:#586b8c}
 .mt{width:100%;border-collapse:collapse}.mt th{text-align:left;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);padding:6px 6px;border-bottom:1px solid var(--line)}.mt td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13.5px;vertical-align:middle}.mt .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.mt .m{color:#9fb4d6;white-space:nowrap}.mt .mo{font-weight:700;color:#eaf6ff}
 .mt .min{width:92px;background:rgba(251,191,36,.16);border:1px solid #fbbf24;border-radius:8px;color:#fff3c4;font:inherit;font-size:14px;font-weight:700;padding:6px 9px;text-align:right;box-sizing:border-box}.mt .min::placeholder{color:rgba(253,230,138,.5);font-weight:400}.mt .min:hover{background:rgba(251,191,36,.24)}.mt .min:focus{outline:none;border-color:#fde047;box-shadow:0 0 0 3px rgba(251,191,36,.25);background:rgba(251,191,36,.28)}.mt .min:disabled{opacity:.35;border-style:dashed}.mt .un{display:block;margin-top:3px;font-size:11px;color:#a8b8d4;line-height:1.3;max-width:150px}
-@media(max-width:700px){.mcards{grid-template-columns:1fr}}`;
+.plh{margin:38px 0 0;font-size:18px}.plw{overflow-x:auto;margin-top:12px;border:1px solid var(--line);border-radius:16px;background:rgba(8,15,30,.6);padding:8px 14px}
+.pt{width:100%;border-collapse:collapse}.pt th{text-align:right;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);padding:8px 8px;border-bottom:1px solid var(--line);white-space:normal;vertical-align:bottom}.pt th:first-child,.pt td:first-child{text-align:left}.pt td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13.5px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.pt tfoot td{font-weight:800;color:#eaf6ff;border-bottom:0}.pt .cc{color:#9fb4d6}.pt .cv{font-weight:700;color:#eaf6ff}
+.pt .pin{width:84px;background:rgba(251,191,36,.16);border:1px solid #fbbf24;border-radius:8px;color:#fff3c4;font:inherit;font-size:14px;font-weight:700;padding:5px 8px;text-align:right;box-sizing:border-box}.pt .pin:focus{outline:none;border-color:#fde047;box-shadow:0 0 0 3px rgba(251,191,36,.25);background:rgba(251,191,36,.28)}.pt .pin::placeholder{color:rgba(253,230,138,.5);font-weight:400}
+.plp{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 0;color:#a8b8d4;font-size:13px}.plp .pin{width:84px;background:rgba(251,191,36,.16);border:1px solid #fbbf24;border-radius:8px;color:#fff3c4;font:inherit;font-size:14px;font-weight:700;padding:5px 8px;text-align:right;box-sizing:border-box}
+.pcharts{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:16px;margin-top:16px}.pch{border:1px solid var(--line);border-radius:16px;background:rgba(8,15,30,.6);padding:14px 16px}.pch h4{margin:0 0 6px;font-size:15px}.pch svg{width:100%;height:auto;display:block}.pleg{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:12px;color:#a8b8d4}.pleg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+@media(max-width:700px){.mcards,.pcharts{grid-template-columns:1fr}}`;
 app.get('/admin/finance', requireAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Rozdělení financí — Laundry Unlimited</title>
 <style>${ADMIN_CSS}${BAR_CSS}.adm{max-width:none;padding:22px}.mut{color:var(--mut);font-size:13px}${FIN_CSS}</style></head><body>${topBar({ mode: 'admin', active: 'split' })}
