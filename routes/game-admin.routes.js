@@ -733,6 +733,31 @@ router.get('/zlocin/pripady', api(async (req, res) => {
   // Skutek a rozpis škody: bez nich se nedá zkontrolovat, že se za totéž
   // nesoudí podruhé. Skládá je řízení, ať je to v novinách i tady stejné.
   const RIZ = require('../services/game/zlocin-rizeni');
+  // Kdy se to stalo: čas obchodů a provizí doplníme dodatečně z dat hry (platí i pro starší případy bez dat v rozpisu)
+  try {
+    const pols = rows.map((r) => r.detail && r.detail.polozky).filter(Boolean);
+    const obIds = Array.from(new Set([].concat(...pols.map((p) => (p.nakupy || []).map((q) => q.obchod).filter((x) => x != null)))));
+    const T = {};
+    if (obIds.length) (await prisma.gameTrade.findMany({ where: { id: { in: obIds } }, select: { id: true, resolved_at: true, created_at: true } })).forEach((t) => { T[t.id] = t.resolved_at || t.created_at; });
+    const hlIds = Array.from(new Set(rows.filter((r) => r.detail && r.detail.polozky && (r.detail.polozky.provize || []).length).map((r) => r.hlavni_id)));
+    const PR = {};   // hlavní hráč → { za(id pozvaného) → { od, do, n } }
+    if (hlIds.length) {
+      const dl = await prisma.gameDelivery.findMany({ where: { player_id: { in: hlIds }, kind: 'cash', popis: { startsWith: 'Provize' } }, select: { player_id: true, spot_id: true, created_at: true } });
+      const spoty = Array.from(new Set(dl.map((d) => d.spot_id).filter((x) => x && !/^nakup:\d+:/.test(String(x)))));
+      const maj = {};
+      if (spoty.length) (await prisma.gameSpotClaim.findMany({ where: { spot_id: { in: spoty } }, select: { player_id: true, spot_id: true } })).forEach((m) => { maj[m.spot_id] = m.player_id; });
+      dl.forEach((d) => {
+        const m = /^nakup:(\d+):/.exec(String(d.spot_id || '')); const za = m ? Number(m[1]) : maj[d.spot_id]; if (!za) return;
+        const o = (PR[d.player_id] = PR[d.player_id] || {}); const e = (o[za] = o[za] || { od: d.created_at, do: d.created_at, n: 0 });
+        if (d.created_at < e.od) e.od = d.created_at; if (d.created_at > e.do) e.do = d.created_at; e.n++;
+      });
+    }
+    rows.forEach((r) => {
+      const p = r.detail && r.detail.polozky; if (!p) return;
+      (p.nakupy || []).forEach((q) => { q.kdy = T[q.obchod] || null; });
+      (p.provize || []).forEach((q) => { const e = (PR[r.hlavni_id] || {})[q.id]; if (e) { q.od = e.od; q.do = e.do; q.pocet = e.n; } });
+    });
+  } catch (e) { console.warn('[zlocin] časy položek:', e && e.message); }
   res.json({ ok: true, pripady: rows.map((r) => Object.assign({}, r, { hlasy: H[r.id] || {},
     hlasujici: vsechnyHlasy.filter((x) => x.zlocin_id === r.id).map((x) => ({ kdo: J[x.player_id] || ('#' + x.player_id), volba: x.volba })),
     zatim: zatim(r),

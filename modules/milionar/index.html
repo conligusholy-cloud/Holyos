@@ -1794,15 +1794,15 @@
       var pl = r.polozky, o = '';
       if (pl && (pl.provize || []).length) {
         var sp = 0;
-        o += '<div style="margin-top:8px"><b>Provize ze zrušených účtů, které si sám pozval</b><table style="margin-top:3px;border-collapse:collapse"><tr><th style="' + th + '">Účet</th><th style="' + th + '">Proč zrušený</th><th style="' + th + ';text-align:right">Provize</th></tr>'
-          + pl.provize.map(function (q) { sp += q.castka || 0; return '<tr><td style="' + td + '">' + esc(q.firma ? q.firma + ' (' + q.nick + ')' : q.nick) + '</td><td style="' + td + '">' + esc(q.duvod || '') + '</td><td style="' + td + ';text-align:right">' + cz(q.castka) + '</td></tr>'; }).join('')
-          + '<tr><td style="' + td + '" colspan="2"><b>Celkem</b></td><td style="' + td + ';text-align:right"><b>' + cz(sp) + '</b></td></tr></table></div>';
+        o += '<div style="margin-top:8px"><b>Provize ze zrušených účtů, které si sám pozval</b><table style="margin-top:3px;border-collapse:collapse"><tr><th style="' + th + '">Účet</th><th style="' + th + '">Proč zrušený</th><th style="' + th + '">Kdy vyplaceno</th><th style="' + th + ';text-align:right">Provize</th></tr>'
+          + pl.provize.map(function (q) { sp += q.castka || 0; return '<tr><td style="' + td + '">' + esc(q.firma ? q.firma + ' (' + q.nick + ')' : q.nick) + '</td><td style="' + td + '">' + esc(q.duvod || '') + '</td><td style="' + td + ';white-space:nowrap">' + (q.od ? (dt(q.od) + (q.do && dt(q.do) !== dt(q.od) ? ' – ' + dt(q.do) : '') + (q.pocet > 1 ? ' (' + q.pocet + '×)' : '')) : '—') + '</td><td style="' + td + ';text-align:right">' + cz(q.castka) + '</td></tr>'; }).join('')
+          + '<tr><td style="' + td + '" colspan="3"><b>Celkem</b></td><td style="' + td + ';text-align:right"><b>' + cz(sp) + '</b></td></tr></table></div>';
       }
       if (pl && (pl.nakupy || []).length) {
         var sn = 0;
-        o += '<div style="margin-top:8px"><b>Nákupy od zrušených účtů pod ceníkem</b><table style="margin-top:3px;border-collapse:collapse"><tr><th style="' + th + '">Obchod</th><th style="' + th + '">Od koho</th><th style="' + th + '">Model</th><th style="' + th + ';text-align:right">Cena</th><th style="' + th + ';text-align:right">Ceník</th><th style="' + th + ';text-align:right">Rozdíl</th></tr>'
-          + pl.nakupy.map(function (q) { sn += q.rozdil || 0; return '<tr><td style="' + td + '">#' + esc(q.obchod) + '</td><td style="' + td + '">' + esc(q.od_firma ? q.od_firma + ' (' + q.od_nick + ')' : (q.od_nick || '?')) + '</td><td style="' + td + '">' + esc(q.model || '') + '</td><td style="' + td + ';text-align:right">' + cz(q.cena) + '</td><td style="' + td + ';text-align:right">' + cz(q.cenik) + '</td><td style="' + td + ';text-align:right">' + cz(q.rozdil) + '</td></tr>'; }).join('')
-          + '<tr><td style="' + td + '" colspan="5"><b>Rozdíl celkem</b></td><td style="' + td + ';text-align:right"><b>' + cz(sn) + '</b></td></tr></table></div>';
+        o += '<div style="margin-top:8px"><b>Nákupy od zrušených účtů pod ceníkem</b><table style="margin-top:3px;border-collapse:collapse"><tr><th style="' + th + '">Obchod</th><th style="' + th + '">Kdy</th><th style="' + th + '">Od koho</th><th style="' + th + '">Model</th><th style="' + th + ';text-align:right">Cena</th><th style="' + th + ';text-align:right">Ceník</th><th style="' + th + ';text-align:right">Rozdíl</th></tr>'
+          + pl.nakupy.map(function (q) { sn += q.rozdil || 0; return '<tr><td style="' + td + '">#' + esc(q.obchod) + '</td><td style="' + td + ';white-space:nowrap">' + (q.kdy ? dt(q.kdy) : '—') + '</td><td style="' + td + '">' + esc(q.od_firma ? q.od_firma + ' (' + q.od_nick + ')' : (q.od_nick || '?')) + '</td><td style="' + td + '">' + esc(q.model || '') + '</td><td style="' + td + ';text-align:right">' + cz(q.cena) + '</td><td style="' + td + ';text-align:right">' + cz(q.cenik) + '</td><td style="' + td + ';text-align:right">' + cz(q.rozdil) + '</td></tr>'; }).join('')
+          + '<tr><td style="' + td + '" colspan="6"><b>Rozdíl celkem</b></td><td style="' + td + ';text-align:right"><b>' + cz(sn) + '</b></td></tr></table></div>';
       }
       if ((r.nalezy || []).length) {
         o += '<div style="margin-top:8px"><b>Nálezy agenta</b>' + r.nalezy.map(function (n) {
