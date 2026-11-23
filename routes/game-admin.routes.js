@@ -434,6 +434,49 @@ router.get('/trziste-prodeje', api(async (req, res) => {
   res.type('text/plain; charset=utf-8').send(text);
 }));
 
+// GET /uvery-hrace?nick=... → co má hráč za úvěry a co se s nimi dělo
+//
+// Banka žije v prohlížeči: úvěry i jejich splátky jsou v uloženém stavu hry.
+// Když hráč hlásí, že splatil a úvěr mu zůstal, tohle je jediné místo, kde
+// se dá podívat, co se opravdu zapsalo — součet úvěrů proti S.loan a vedle
+// toho řádky z knihy o splátkách a čerpání.
+router.get('/uvery-hrace', api(async (req, res) => {
+  const nick = String(req.query.nick || '').trim();
+  const h = nick
+    ? await prisma.gamePlayer.findFirst({ where: { nick }, select: { id: true, nick: true, state: true } })
+    : null;
+  if (!h) return res.type('text/plain; charset=utf-8').send('Hráče „' + nick + '" neznám.');
+  const st = h.state || {};
+  const uvery = Array.isArray(st.loans) ? st.loans : [];
+  const kc = (n) => Math.round(Number(n) || 0).toLocaleString('cs-CZ') + ' L$';
+  const soucet = uvery.reduce((a, l) => a + (Number(l.zbyva) || 0), 0);
+  // Kniha se ukládá zkratkami: t = kdy, d = druh, p = popis, c = částka,
+  // z = zůstatek po zápisu.
+  const kniha = (Array.isArray(st.kniha) ? st.kniha : [])
+    .filter((z) => z && (z.d === 'splatka' || z.d === 'uver'))
+    .slice(-25);
+  const text = 'ÚVĚRY · ' + h.nick + ' (#' + h.id + ')\n\n'
+    + 'hotovost           ' + kc(st.cash) + '\n'
+    + 'S.loan (souhrn)    ' + kc(st.loan) + '\n'
+    + 'součet úvěrů       ' + kc(soucet)
+    + (Math.abs((Number(st.loan) || 0) - soucet) < 1 ? '   (sedí)' : '   NESEDÍ — rozdíl ' + kc(soucet - (Number(st.loan) || 0))) + '\n'
+    + 'rámec čerpáno      ' + kc((st.ramec || {}).cerpano) + ' z ' + kc((st.ramec || {}).limit) + '\n\n'
+    + 'ÚVĚRY (' + uvery.length + ')\n'
+    + (uvery.length ? uvery.map((l) => '  ' + ((l.popis || l.druh || '?') + '                              ').slice(0, 34)
+      + ' zbývá ' + (kc(l.zbyva) + '            ').slice(0, 14)
+      + ' z ' + (kc(l.puvodni) + '            ').slice(0, 14)
+      + ' splátka ' + (kc(l.splatka) + '          ').slice(0, 12)
+      + ' ' + ((Number(l.sazba) || 0) * 100).toFixed(1) + ' %'
+      + (l.spotId ? '  místo ' + l.spotId : '')).join('\n') : '  (žádné)') + '\n\n'
+    + 'POSLEDNÍ ŘÁDKY KNIHY O ÚVĚRECH (' + kniha.length + ')\n'
+    + (kniha.length ? kniha.map((z) => '  ' + new Date(z.t || 0).toLocaleString('cs-CZ')
+      + '  ' + ((z.d || '?') + '        ').slice(0, 9)
+      + ' ' + (kc(z.c) + '            ').slice(0, 14)
+      + ' zůstatek ' + (kc(z.z) + '            ').slice(0, 14)
+      + ' ' + String(z.p || '').replace(/<[^>]*>/g, '').slice(0, 50)).join('\n') : '  (nic)');
+  res.type('text/plain; charset=utf-8').send(text);
+}));
+
 // GET /sit-rozdily → vidí server stejnou síť jako hra?
 // Rozhoduje to o tom, jestli má vůbec smysl porovnávat zisk: dokud se
 // rozchází model stroje nebo skóre místa, nebyl by rozdíl chybou výpočtu,
