@@ -917,7 +917,7 @@ const finClean = (d) => {
   const rows = (Array.isArray(d && d.rows) ? d.rows : []).slice(0, 300).map((r) => {
     const v = {}; Object.keys((r && r.v) || {}).forEach((k) => { const x = Number(r.v[k]); if (ids.has(k) && isFinite(x)) v[k] = Math.max(0, Math.min(100, Math.round(x * 100) / 100)); });
     const amt = Number(r.amt);
-    return { id: idc(r.id), name: str(r.name, 200), freq: ['once', 'tx', 'day', 'week', 'month', 'quarter', 'year'].includes(r.freq) ? r.freq : undefined, amt: r.amt != null && r.amt !== '' && isFinite(amt) && amt >= 0 ? Math.min(1e12, Math.round(amt * 100) / 100) : undefined, pct: r.pct != null && r.pct !== '' && isFinite(Number(r.pct)) && Number(r.pct) >= 0 ? Math.min(1000, Math.round(Number(r.pct) * 100) / 100) : undefined, price: r.price != null && r.price !== '' && isFinite(Number(r.price)) && Number(r.price) >= 0 ? Math.min(1e12, Math.round(Number(r.price) * 100) / 100) : undefined, v };
+    return { id: idc(r.id), name: str(r.name, 200), freq: ['once', 'tx', 'day', 'week', 'month', 'quarter', 'half', 'year', 'y5', 'y10'].includes(r.freq) ? r.freq : undefined, amt: r.amt != null && r.amt !== '' && isFinite(amt) && amt >= 0 ? Math.min(1e12, Math.round(amt * 100) / 100) : undefined, pct: r.pct != null && r.pct !== '' && isFinite(Number(r.pct)) && Number(r.pct) >= 0 ? Math.min(1000, Math.round(Number(r.pct) * 100) / 100) : undefined, price: r.price != null && r.price !== '' && isFinite(Number(r.price)) && Number(r.price) >= 0 ? Math.min(1e12, Math.round(Number(r.price) * 100) / 100) : undefined, v };
   }).filter((r) => r.id);
   return { cols, rows };
 };
