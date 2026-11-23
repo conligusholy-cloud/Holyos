@@ -331,6 +331,20 @@ async function tik() {
         await zahaj(prisma, R, row); n++;
       }
     }
+    // 3) Analytik: jednou denně nechá model projít hru a hledat vzorce, na
+    //    které detektory nestačí. Nic nezahajuje — nálezy čte člověk
+    //    v administraci. Běží až nakonec, ať případné selhání nezdrží řízení.
+    if (R.analytik_denne) {
+      try {
+        const AN = require('./zlocin-analytik');
+        const posl = await AN.posledni();
+        const stari = posl && posl.kdy ? (Date.now() - new Date(posl.kdy).getTime()) : Infinity;
+        if (stari > 20 * 3600e3) {
+          const r = await AN.analyzuj(prisma);
+          console.log('[zlocin-analytik] ' + (r.ok ? ('nálezů ' + r.nalezu) : ('selhalo: ' + r.error)));
+        }
+      } catch (e) { console.warn('[zlocin-analytik]', e && e.message); }
+    }
   } catch (e) {
     console.warn('[zlocin] tik:', e && e.message);
   } finally { bezi = false; }

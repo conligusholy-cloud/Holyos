@@ -134,7 +134,13 @@ function ma(podminka, popis, detail) {
     const ADM = fs.readFileSync(path.join(__dirname, '..', 'routes/game-admin.routes.js'), 'utf8');
     ma(/\/zlocin\/analytik\/podklad/.test(ADM), 'podklad se dá zkontrolovat');
     const RIZ = fs.readFileSync(path.join(__dirname, '..', 'services/game/zlocin-rizeni.js'), 'utf8');
-    ma(!/analytik/.test(RIZ), 'řízení o analytikovi vůbec neví — nemá jak ho poslechnout');
+    // Řízení analytika jen SPOUŠTÍ. Nesmí z jeho nálezů nic zakládat —
+    // jediné, co se s nimi dělá, je zápis do nastavení a přečtení člověkem.
+    ma(/R\.analytik_denne/.test(RIZ), 'řízení ho umí pustit jednou denně');
+    ma(!/AN\.[a-z]*\s*\([^)]*\)[\s\S]{0,200}zahaj\(/.test(RIZ), 'ale z jeho nálezů nic nezakládá');
+    ma(/20 \* 3600e3/.test(RIZ), 'a nepustí ho častěji než jednou za dvacet hodin');
+    const ZL = fs.readFileSync(path.join(__dirname, '..', 'services/game/zlocin.js'), 'utf8');
+    ma(/analytik_denne: false/.test(ZL), 've výchozím stavu je denní běh vypnutý');
 
     console.log(chyb ? '\n' + chyb + ' CHYB' : '\nVšechno sedí.');
     process.exit(chyb ? 1 : 0);

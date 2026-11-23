@@ -56,6 +56,10 @@ const VYCHOZI = {
   det_drazby: true,
   det_fond: true,
   det_pujcky: true,
+  // Analytik: necháme model jednou denně projít hru a hledat vzorce, které
+  // detektory neumí. Stojí to tokeny, takže je to zvlášť a ve výchozím stavu
+  // vypnuté — jeho nálezy stejně nic nezahajují, čte je člověk.
+  analytik_denne: false,
   // Štítky u hráče v žebříčcích a profilu — mění se podle útvaru a fáze řízení
   emblemy: { celni: '🛃', policie: '🚓', financni: '💼', soud: '⚖️', porota: '👥', recidiva: '🚫', hotovo: '✅' },
 };
@@ -81,7 +85,7 @@ async function uloz(vstup) {
   if ('zapnuto' in b) out.zapnuto = !!b.zapnuto;
   if ('chranit_platici' in b) out.chranit_platici = !!b.chranit_platici;
   if ('vratit_balicky' in b) out.vratit_balicky = !!b.vratit_balicky;
-  ['agent_zapnuto', 'det_spojene_obchody', 'det_drazby', 'det_fond', 'det_pujcky']
+  ['agent_zapnuto', 'det_spojene_obchody', 'det_drazby', 'det_fond', 'det_pujcky', 'analytik_denne']
     .forEach((k) => { if (k in b) out[k] = !!b[k]; });
   if (b.emblemy && typeof b.emblemy === 'object') {
     out.emblemy = Object.assign({}, VYCHOZI.emblemy, out.emblemy || {});
