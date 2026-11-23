@@ -52,14 +52,14 @@
       { key: 'upd', label: 'Změna', type: 'date', ph: 'dd.mm.rrrr', get: function (t) { return t.updated_at; } },
       null,
     ];
-    if (window.ColFilters && window.ColFilters.table) T = window.ColFilters.table({ table: '#tk', columns: cols, renderRow: rowHtml, noun: 'úkolů', emptyText: 'Žádné úkoly. Nový založíte tlačítkem „＋ Nový úkol“.' });
+    if (window.ColFilters && window.ColFilters.table) T = window.ColFilters.table({ table: '#tk', columns: cols, renderRow: rowHtml, noun: 'tasků', emptyText: 'Žádné tasky. Nový založíte tlačítkem „＋ Nový task“.' });
   }
   function render() {
     quickBar();
     var f = (QUICK.filter(function (x) { return x[0] === QF; })[0] || QUICK[0])[2];
     var rows = D.tasks.filter(f);
     if (T) T.setRows(rows);
-    else $('#tk tbody').innerHTML = rows.map(rowHtml).join('') || '<tr><td colspan="9" class="mut">Žádné úkoly.</td></tr>';
+    else $('#tk tbody').innerHTML = rows.map(rowHtml).join('') || '<tr><td colspan="9" class="mut">Žádné tasky.</td></tr>';
   }
   function load(openId) {
     return call('/admin/api/tasks').then(function (j) {
@@ -94,7 +94,7 @@
     return o;
   }
   function newTask() {
-    var o = modal('Nový úkol', '<form>' + formHtml(null) + '<div class="mer"></div><div class="mact"><span class="mut">Řešiteli přijde upozornění do Velínu (kdo v HolyOS není, dostane e-mail).</span><button class="btn sm" type="submit">Založit úkol</button></div></form>');
+    var o = modal('Nový task', '<form>' + formHtml(null) + '<div class="mer"></div><div class="mact"><span class="mut">Řešiteli přijde upozornění do Velínu (kdo v HolyOS není, dostane e-mail).</span><button class="btn sm" type="submit">Založit task</button></div></form>');
     var f = o.querySelector('form'); f.querySelector('input[name="title"]').focus();
     f.onsubmit = function (e) {
       e.preventDefault(); var d = readForm(f); if (!d.title.trim()) return;
@@ -109,9 +109,9 @@
   }
   function openTask(id) {
     call('/admin/api/tasks/' + id).then(function (j) {
-      if (!j.ok) { alert(j.error || 'Úkol nenalezen'); return; }
+      if (!j.ok) { alert(j.error || 'Task nenalezen'); return; }
       var t = j.task;
-      var o = modal('Úkol #' + t.id, '<form>' + formHtml(t) + '<div class="mer"></div><div class="mact"><span class="mut">Založil(a) ' + esc(t.creator_name || '') + ' · ' + fdt(t.created_at) + (t.done_at ? ' · hotovo ' + fdt(t.done_at) : '') + '</span><span style="display:flex;gap:8px">' + (t.creator_key === D.me.key || !t.creator_key ? '<button class="btn sm ghost" type="button" data-del>Smazat</button>' : '') + '<button class="btn sm" type="submit">Uložit změny</button></span></div></form>' +
+      var o = modal('Task #' + t.id, '<form>' + formHtml(t) + '<div class="mer"></div><div class="mact"><span class="mut">Založil(a) ' + esc(t.creator_name || '') + ' · ' + fdt(t.created_at) + (t.done_at ? ' · hotovo ' + fdt(t.done_at) : '') + '</span><span style="display:flex;gap:8px">' + (t.creator_key === D.me.key || !t.creator_key ? '<button class="btn sm ghost" type="button" data-del>Smazat</button>' : '') + '<button class="btn sm" type="submit">Uložit změny</button></span></div></form>' +
         '<div class="lg"><h4>Průběh řešení</h4><div id="tk-log">' + logHtml(j.log) + '</div><div class="cm"><textarea id="tk-cm" maxlength="5000" placeholder="Napište komentář — jak to vypadá, co je potřeba…"></textarea><button class="btn sm" type="button" id="tk-cmb">Přidat</button></div></div>');
       var f = o.querySelector('form');
       f.onsubmit = function (e) {
@@ -119,7 +119,7 @@
         call('/admin/api/tasks/' + t.id, d).then(function (r) { if (!r.ok) { f.querySelector('.mer').textContent = r.error || 'Chyba'; return; } closeModal(); load(); });
       };
       var del = o.querySelector('[data-del]');
-      if (del) del.onclick = function () { if (!confirm('Opravdu smazat úkol „' + t.title + '“ i s historií?')) return; call('/admin/api/tasks/' + t.id + '/delete', {}).then(function (r) { if (!r.ok) { alert(r.error || 'Chyba'); return; } closeModal(); load(); }); };
+      if (del) del.onclick = function () { if (!confirm('Opravdu smazat task „' + t.title + '“ i s historií?')) return; call('/admin/api/tasks/' + t.id + '/delete', {}).then(function (r) { if (!r.ok) { alert(r.error || 'Chyba'); return; } closeModal(); load(); }); };
       o.querySelector('#tk-cmb').onclick = function () {
         var ta = o.querySelector('#tk-cm'), text = ta.value.trim(); if (!text) return;
         call('/admin/api/tasks/' + t.id + '/comment', { text: text }).then(function (r) {

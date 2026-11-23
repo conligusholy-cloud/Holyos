@@ -552,13 +552,13 @@ const uico = (k) => `<span class="uic"><svg viewBox="0 0 24 24" fill="none" stro
 function topBar(o) {
   const en = o.lang && o.lang !== 'cs';
   const tabs = o.mode === 'admin'
-    ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })), [{ k: 'model', href: '/admin/model', t: 'Modelace business modelu' }, { k: 'split', href: '/admin/finance', t: 'Rozdělení financí' }, { k: 'ukoly', href: '/admin/tasks', t: 'Úkoly' }])
+    ? [{ k: 'ukoly', href: '/admin/tasks', t: 'Tasky' }, { k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })), [{ k: 'model', href: '/admin/model', t: 'Modelace business modelu' }, { k: 'split', href: '/admin/finance', t: 'Rozdělení financí' }])
     : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: en ? x.en : x.cs }));
   const rt = o.mode === 'admin'
     ? `<a href="/portal" class="rtl">${uico('report')}<span>Uživatelské prostředí</span></a><a href="/portal/logout" class="rtl"><span>Odhlásit</span></a>`
     : `<span class="who">${esc(o.user || '')}</span>${o.admin ? `<a href="/admin" class="rtl">${uico('leady')}<span>Administrace</span></a>` : ''}<a href="/portal/logout">${en ? 'Log out' : 'Odhlásit'}</a>`;
   return `<aside class="uside"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lugr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22e6ff"/><stop offset="1" stop-color="#2f7bff"/></linearGradient></defs></svg><a class="brand" href="${o.mode === 'admin' ? '/admin' : '/portal'}">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým' : 'Laundry Unlimited'}</small></span></a>
-<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}${x.k === 'ukoly' ? ' id="nav-ukoly"' : ''}>${uico(x.k)}<span>${esc(x.t)}</span></a>`).join('')}</nav>${o.mode === 'admin' ? '<script>fetch("/admin/api/tasks/count").then(function(r){return r.json()}).then(function(j){var a=document.getElementById("nav-ukoly");if(a&&j&&j.mine>0){var b=document.createElement("b");b.textContent=j.mine;b.title="Moje otevřené úkoly";b.style.cssText="margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:linear-gradient(135deg,#22e6ff,#2f7bff);color:#03101f;font-size:12px;display:inline-grid;place-items:center";a.appendChild(b)}}).catch(function(){})</script>' : ''}${o.mode === 'admin' ? `<nav class="ubot"><a href="/admin/users"${o.active === 'uzivatele' ? ' class="on"' : ''}>${uico('uzivatele')}<span>Uživatelé administrace</span></a></nav>` : ''}</aside><div class="utop">${rt}</div>`;
+<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}${x.k === 'ukoly' ? ' id="nav-ukoly"' : ''}>${uico(x.k)}<span>${esc(x.t)}</span></a>`).join('')}</nav>${o.mode === 'admin' ? '<script>fetch("/admin/api/tasks/count").then(function(r){return r.json()}).then(function(j){var a=document.getElementById("nav-ukoly");if(a&&j&&j.mine>0){var b=document.createElement("b");b.textContent=j.mine;b.title="Moje otevřené tasky";b.style.cssText="margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:linear-gradient(135deg,#22e6ff,#2f7bff);color:#03101f;font-size:12px;display:inline-grid;place-items:center";a.appendChild(b)}}).catch(function(){})</script>' : ''}${o.mode === 'admin' ? `<nav class="ubot"><a href="/admin/users"${o.active === 'uzivatele' ? ' class="on"' : ''}>${uico('uzivatele')}<span>Uživatelé administrace</span></a></nav>` : ''}</aside><div class="utop">${rt}</div>`;
 }
 // Stránka materiálů v liště administrace / portálu
 let T01 = null;
@@ -1046,9 +1046,9 @@ app.post('/admin/api/tasks/:id(\\d+)/delete', requireAdmin, express.json({ limit
   } catch (e) { res.json({ ok: false, error: 'Smazání se nepovedlo' }); }
 });
 app.get('/admin/tasks', requireAdmin, (req, res) => {
-  res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Úkoly — Laundry Unlimited</title>
+  res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Tasky — Laundry Unlimited</title>
 <style>${ADMIN_CSS}${BAR_CSS}${TASK_CSS}</style></head><body>${topBar({ mode: 'admin', active: 'ukoly' })}
-<div class="adm"><div class="tkh"><h3>Úkoly týmu</h3><button class="btn sm" id="tk-new" type="button">＋ Nový úkol</button><span class="mut" id="tk-st"></span></div>
+<div class="adm"><div class="tkh"><h3>Tasky týmu</h3><button class="btn sm" id="tk-new" type="button">＋ Nový task</button><span class="mut" id="tk-st"></span></div>
 <div class="tkq" id="tk-q"></div>
 <div class="tkw"><table id="tk" class="tkt"></table></div></div>
 <script src="/admin/column-filters.js"></script><script src="/admin/tasks.js"></script></body></html>`);
