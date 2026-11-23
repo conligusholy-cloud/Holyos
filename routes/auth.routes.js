@@ -421,7 +421,7 @@ router.get('/sso/laundry-unlimited', requireAuth, async (req, res, next) => {
   try {
     if (!(await luAllowed(req.user))) return res.status(403).send('Do této sekce nemáš přístup.');
     const p = req.user.person;
-    const token = jwt.sign({ uid: req.user.id, pid: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), aud: 'laundry-unlimited', iss: 'holyos' }, process.env.LU_SSO_SECRET, { expiresIn: '2m' });
+    const token = jwt.sign({ uid: req.user.id, pid: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), email: p.email || undefined, aud: 'laundry-unlimited', iss: 'holyos' }, process.env.LU_SSO_SECRET, { expiresIn: '2m' });
     res.redirect(String(process.env.LU_URL).replace(/\/$/, '') + '/sso?t=' + encodeURIComponent(token));
   } catch (err) { next(err); }
 });
@@ -448,6 +448,30 @@ router.post('/lu/notify', express.json({ limit: '20kb' }), async (req, res, next
       if (p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link }).catch((e) => console.warn('[lu notify] zvonek', p.user_id, e.message));
     }
     res.json({ ok: true, recipients: persons.length });
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/lu/task-notify — Laundry Unlimited: úkol týmu → Velín + zvoneček KONKRÉTNÍ osobě (podle id osoby nebo e-mailu). Vrací recipients (0 = osoba v HolyOS není → LU pošle e-mail).
+router.post('/lu/task-notify', express.json({ limit: '20kb' }), async (req, res, next) => {
+  try {
+    const secret = process.env.LU_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'laundry-unlimited' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    const b = req.body || {};
+    const pid = parseInt(b.pid, 10) || null, email = String(b.email || '').trim().toLowerCase().slice(0, 160);
+    let person = null;
+    if (pid) person = await prisma.person.findFirst({ where: { id: pid, active: true }, select: { id: true, user_id: true } });
+    if (!person && /@/.test(email)) person = await prisma.person.findFirst({ where: { active: true, email: { equals: email, mode: 'insensitive' } }, select: { id: true, user_id: true } });
+    if (!person) return res.json({ ok: true, recipients: 0 });
+    const title = String(b.title || 'Laundry Unlimited — úkol').slice(0, 120), body = String(b.body || '').slice(0, 300);
+    const luHost = String(process.env.LU_URL || 'https://laundry-unlimited.com').replace(/\/$/, '');
+    const link = String(b.link || '').startsWith(luHost) ? String(b.link) : luHost + '/admin/tasks';
+    const { notifyPerson } = require('../services/push/expo-push');
+    const { createNotification } = require('./notifications.routes');
+    notifyPerson(prisma, person.id, { title, body, data: { type: 'lu_task', link }, sound: 'default', channelId: 'default' }).catch((e) => console.warn('[lu task] push', person.id, e.message));
+    if (person.user_id) createNotification({ userId: person.user_id, type: 'system', title, body, link }).catch((e) => console.warn('[lu task] zvonek', e.message));
+    res.json({ ok: true, recipients: 1 });
   } catch (err) { next(err); }
 });
 

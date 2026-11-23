@@ -90,6 +90,40 @@ async function initDb() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_by TEXT
   )`);
+  // Úkoly týmu (agenda): kdo komu co zadal, stav řešení; lu_task_log = historie + komentáře
+  await q(`CREATE TABLE IF NOT EXISTS lu_tasks (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'todo',
+    priority TEXT NOT NULL DEFAULT 'normal',
+    assignee_key TEXT,
+    assignee_name TEXT,
+    creator_key TEXT,
+    creator_name TEXT,
+    due_date DATE,
+    done_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await q('CREATE INDEX IF NOT EXISTS lu_tasks_assignee_idx ON lu_tasks (assignee_key, status)');
+  await q(`CREATE TABLE IF NOT EXISTS lu_task_log (
+    id SERIAL PRIMARY KEY,
+    task_id INT NOT NULL REFERENCES lu_tasks(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'comment',
+    author_key TEXT,
+    author_name TEXT,
+    text TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
+  await q('CREATE INDEX IF NOT EXISTS lu_task_log_task_idx ON lu_task_log (task_id)');
+  // Kdo se přihlásil z HolyOS (SSO) — aby šel vybrat jako řešitel úkolu
+  await q(`CREATE TABLE IF NOT EXISTS sso_people (
+    pid INT PRIMARY KEY,
+    name TEXT,
+    email TEXT,
+    last_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`);
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_sent_at TIMESTAMPTZ');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_count INT NOT NULL DEFAULT 0');
   await q('ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS invite_error TEXT');
@@ -512,18 +546,19 @@ const UICO = {
   split: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
   uzivatele: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M16 11h6"/>',
   holyos: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
+  ukoly: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
 };
 const uico = (k) => `<span class="uic"><svg viewBox="0 0 24 24" fill="none" stroke="url(#lugr)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${UICO[k] || ''}</svg></span>`;
 function topBar(o) {
   const en = o.lang && o.lang !== 'cs';
   const tabs = o.mode === 'admin'
-    ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })), [{ k: 'model', href: '/admin/model', t: 'Modelace business modelu' }, { k: 'split', href: '/admin/finance', t: 'Rozdělení financí' }])
+    ? [{ k: 'leady', href: '/admin', t: 'Leady' }].concat(SEKCE.map((x) => ({ k: x.k, href: '/admin/m/' + x.k, t: x.cs })), [{ k: 'model', href: '/admin/model', t: 'Modelace business modelu' }, { k: 'split', href: '/admin/finance', t: 'Rozdělení financí' }, { k: 'ukoly', href: '/admin/tasks', t: 'Úkoly' }])
     : SEKCE.filter((x) => (o.sekce || []).includes(x.k)).map((x) => ({ k: x.k, href: '/portal/m/' + x.k, t: en ? x.en : x.cs }));
   const rt = o.mode === 'admin'
     ? `<a href="/portal" class="rtl">${uico('report')}<span>Uživatelské prostředí</span></a><a href="/portal/logout" class="rtl"><span>Odhlásit</span></a>`
     : `<span class="who">${esc(o.user || '')}</span>${o.admin ? `<a href="/admin" class="rtl">${uico('leady')}<span>Administrace</span></a>` : ''}<a href="/portal/logout">${en ? 'Log out' : 'Odhlásit'}</a>`;
   return `<aside class="uside"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="lugr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22e6ff"/><stop offset="1" stop-color="#2f7bff"/></linearGradient></defs></svg><a class="brand" href="${o.mode === 'admin' ? '/admin' : '/portal'}">${logoHtml(30)}<span class="ttl">${o.mode === 'admin' ? 'Administrace' : (en ? 'Partner portal' : 'Partnerský portál')}<small>${o.mode === 'admin' ? 'jen pro tým' : 'Laundry Unlimited'}</small></span></a>
-<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}>${uico(x.k)}<span>${esc(x.t)}</span></a>`).join('')}</nav>${o.mode === 'admin' ? `<nav class="ubot"><a href="/admin/users"${o.active === 'uzivatele' ? ' class="on"' : ''}>${uico('uzivatele')}<span>Uživatelé administrace</span></a></nav>` : ''}</aside><div class="utop">${rt}</div>`;
+<nav>${tabs.map((x) => `<a href="${x.href}"${x.k === o.active ? ' class="on"' : ''}${x.k === 'ukoly' ? ' id="nav-ukoly"' : ''}>${uico(x.k)}<span>${esc(x.t)}</span></a>`).join('')}</nav>${o.mode === 'admin' ? '<script>fetch("/admin/api/tasks/count").then(function(r){return r.json()}).then(function(j){var a=document.getElementById("nav-ukoly");if(a&&j&&j.mine>0){var b=document.createElement("b");b.textContent=j.mine;b.title="Moje otevřené úkoly";b.style.cssText="margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:linear-gradient(135deg,#22e6ff,#2f7bff);color:#03101f;font-size:12px;display:inline-grid;place-items:center";a.appendChild(b)}}).catch(function(){})</script>' : ''}${o.mode === 'admin' ? `<nav class="ubot"><a href="/admin/users"${o.active === 'uzivatele' ? ' class="on"' : ''}>${uico('uzivatele')}<span>Uživatelé administrace</span></a></nav>` : ''}</aside><div class="utop">${rt}</div>`;
 }
 // Stránka materiálů v liště administrace / portálu
 let T01 = null;
@@ -757,13 +792,14 @@ app.get('/portal/m/:sekce(report|ekonomika|technika|proc)', async (req, res) => 
 app.get('/portal/logout', (req, res) => { res.set('Set-Cookie', [UCOOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0', COOKIE + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0']); res.redirect(302, '/login'); });
 
 // ── Administrace (SSO z HolyOS) ────────────────────────────────────────────
-function adminOf(req) { if (!SESSION_KEY) return null; try { const t = jwt.verify(readCookie(req, COOKIE), SESSION_KEY, { audience: 'lu-admin', issuer: 'laundry-unlimited' }); return { name: t.name || '', email: t.email || '' }; } catch (e) { return null; } }
+function adminOf(req) { if (!SESSION_KEY) return null; try { const t = jwt.verify(readCookie(req, COOKIE), SESSION_KEY, { audience: 'lu-admin', issuer: 'laundry-unlimited' }); return { name: t.name || '', email: t.email || '', pid: t.pid || null }; } catch (e) { return null; } }
 const toHolyos = () => HOLYOS_URL + '/api/auth/sso/laundry-unlimited';
 app.get('/sso', (req, res) => {
   try {
     if (!LU_SECRET) return res.status(500).type('text/plain').send('Chybí LU_SSO_SECRET');
     const t = jwt.verify(String(req.query.t || ''), LU_SECRET, { audience: 'laundry-unlimited', issuer: 'holyos' });
-    const session = jwt.sign({ name: t.name || '', aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
+    const session = jwt.sign({ name: t.name || '', email: t.email ? String(t.email).toLowerCase() : undefined, pid: t.pid || undefined, aud: 'lu-admin', iss: 'laundry-unlimited' }, SESSION_KEY, { expiresIn: '8h' });
+    if (t.pid) q('INSERT INTO sso_people (pid, name, email, last_at) VALUES ($1,$2,$3,now()) ON CONFLICT (pid) DO UPDATE SET name=EXCLUDED.name, email=COALESCE(EXCLUDED.email, sso_people.email), last_at=now()', [Number(t.pid), t.name || '', t.email ? String(t.email).toLowerCase() : null]).catch(() => {});
     res.set('Set-Cookie', COOKIE + '=' + encodeURIComponent(session) + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + 8 * 3600);
     res.set('Cache-Control', 'no-store').redirect(302, '/admin');
   } catch (e) { res.status(401).type('text/plain').send('Přihlášení vypršelo. Otevři sekci Laundry Unlimited znovu z HolyOS.'); }
@@ -888,6 +924,153 @@ app.post('/admin/api/users/:id(\\d+)/delete', requireAdmin, express.json({ limit
   if (String(r.email).toLowerCase() === String((req.admin && req.admin.email) || '').toLowerCase()) return res.json({ ok: false, error: 'Sám sebe smazat nelze' });
   await q('DELETE FROM admin_users WHERE id=$1', [req.params.id]); res.json({ ok: true });
 });
+// ── Úkoly týmu ──────────────────────────────────────────────────────────────
+// Osoba = klíč: e-mail (malými písmeny) nebo „pid:<id osoby v HolyOS>“ u přihlášení z HolyOS bez e-mailu.
+const TASK_ST = { todo: 'Nový', doing: 'Řeší se', waiting: 'Čeká', done: 'Hotovo', cancel: 'Zrušeno' };
+const TASK_PRI = { low: 'Nízká', normal: 'Běžná', high: 'Vysoká', urgent: 'Urgentní' };
+const taskMe = (req) => { const a = req.admin || {}; const key = a.email ? String(a.email).toLowerCase() : (a.pid ? 'pid:' + a.pid : 'name:' + (a.name || '?')); return { key, name: a.name || a.email || '?', email: a.email || null, pid: a.pid || null }; };
+async function taskPeople() {
+  const out = new Map();
+  const add = (key, name, email, pid) => { if (!key) return; const k = String(key).toLowerCase(); const x = out.get(k) || {}; out.set(k, { key: k, name: name || x.name || email || k, email: email || x.email || null, pid: pid || x.pid || null }); };
+  const sso = (await q('SELECT pid, name, email FROM sso_people ORDER BY name').catch(() => ({ rows: [] }))).rows;
+  const ssoEmails = new Set(sso.filter((p) => p.email).map((p) => String(p.email).toLowerCase()));
+  (await q('SELECT email, name FROM admin_users WHERE active ORDER BY name').catch(() => ({ rows: [] }))).rows.forEach((r) => add(String(r.email).toLowerCase(), r.name, String(r.email).toLowerCase()));
+  ADMIN_EMAILS.forEach((e) => { if (!out.has(e)) add(e, null, e); });
+  sso.forEach((p) => { if (p.email) add(String(p.email).toLowerCase(), p.name, String(p.email).toLowerCase(), p.pid); else add('pid:' + p.pid, p.name, null, p.pid); });
+  // osoba z konfigurace bez jména, ale se SSO záznamem — doplň jméno
+  ssoEmails.forEach(() => {});
+  return Array.from(out.values()).sort((a, b) => String(a.name).localeCompare(String(b.name), 'cs'));
+}
+// Upozornění řešiteli / zadavateli: Velín + zvoneček v HolyOS; kdo v HolyOS není, dostane e-mail
+function taskNotify(person, title, body, taskId) {
+  (async () => {
+    if (!person || !LU_SECRET) return;
+    const link = PUBLIC_URL + '/admin/tasks?id=' + taskId;
+    const svc = jwt.sign({ aud: 'holyos-api', iss: 'laundry-unlimited' }, LU_SECRET, { expiresIn: '2m' });
+    let found = false;
+    try {
+      const r = await fetch(HOLYOS_URL + '/api/auth/lu/task-notify', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: person.email || null, pid: person.pid || null, title, body, link }), signal: AbortSignal.timeout(15000) });
+      const j = await r.json().catch(() => ({})); found = !!(r.ok && j.recipients > 0);
+    } catch (e) { console.warn('[lu] úkol notifikace:', e.message); }
+    if (!found && person.email) {
+      try { await fetch(HOLYOS_URL + '/api/auth/lu/mail', { method: 'POST', headers: { Authorization: 'Bearer ' + svc, 'Content-Type': 'application/json' }, body: JSON.stringify({ to: person.email, subject: title, body: body + '\n\nÚkol otevřete tlačítkem níže.', link, linkLabel: 'Otevřít úkol', lang: 'cs' }), signal: AbortSignal.timeout(20000) }); } catch (e) { console.warn('[lu] úkol e-mail:', e.message); }
+    }
+  })().catch(() => {});
+}
+const taskLog = (id, kind, me, text) => q('INSERT INTO lu_task_log (task_id, kind, author_key, author_name, text) VALUES ($1,$2,$3,$4,$5)', [id, kind, me.key, me.name, text]).catch((e) => console.warn('[lu] task log:', e.message));
+let TASKS_JS = null;
+app.get('/admin/tasks.js', requireAdmin, (req, res) => {
+  if (!TASKS_JS || process.env.NODE_ENV !== 'production') TASKS_JS = fs.readFileSync(path.join(__dirname, 'tasks-client.js'), 'utf8');
+  res.set('Cache-Control', 'no-cache').type('application/javascript').send(TASKS_JS);
+});
+app.get('/admin/api/tasks/count', requireAdmin, async (req, res) => {
+  try { const me = taskMe(req); const r = await q("SELECT count(*)::int AS n FROM lu_tasks WHERE assignee_key=$1 AND status NOT IN ('done','cancel')", [me.key]); res.set('Cache-Control', 'no-store').json({ ok: true, mine: r.rows[0].n }); }
+  catch (e) { res.json({ ok: false, mine: 0 }); }
+});
+app.get('/admin/api/tasks', requireAdmin, async (req, res) => {
+  try {
+    const rows = (await q("SELECT t.*, (SELECT count(*)::int FROM lu_task_log l WHERE l.task_id=t.id AND l.kind='comment') AS comments FROM lu_tasks t ORDER BY (t.status IN ('done','cancel')), t.due_date NULLS LAST, t.id DESC LIMIT 2000")).rows;
+    res.set('Cache-Control', 'no-store').json({ ok: true, me: taskMe(req), people: await taskPeople(), tasks: rows, statuses: TASK_ST, priorities: TASK_PRI });
+  } catch (e) { console.warn('[lu] tasks:', e.message); res.json({ ok: false, error: 'Úkoly se nepodařilo načíst' }); }
+});
+app.get('/admin/api/tasks/:id(\\d+)', requireAdmin, async (req, res) => {
+  try {
+    const t = (await q('SELECT * FROM lu_tasks WHERE id=$1', [req.params.id])).rows[0]; if (!t) return res.json({ ok: false, error: 'Úkol nenalezen' });
+    const log = (await q('SELECT * FROM lu_task_log WHERE task_id=$1 ORDER BY created_at, id', [req.params.id])).rows;
+    res.set('Cache-Control', 'no-store').json({ ok: true, task: t, log });
+  } catch (e) { res.json({ ok: false, error: 'Úkol se nepodařilo načíst' }); }
+});
+const taskIn = (b, people) => {
+  const c = (v, n) => String(v == null ? '' : v).trim().slice(0, n), out = {};
+  if (b.title !== undefined) out.title = c(b.title, 200);
+  if (b.description !== undefined) out.description = c(b.description, 8000) || null;
+  if (b.status !== undefined && TASK_ST[b.status]) out.status = b.status;
+  if (b.priority !== undefined && TASK_PRI[b.priority]) out.priority = b.priority;
+  if (b.due_date !== undefined) out.due_date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.due_date)) ? String(b.due_date) : null;
+  if (b.assignee_key !== undefined) { const p = people.find((x) => x.key === String(b.assignee_key || '').toLowerCase()); out.assignee_key = p ? p.key : null; out.assignee_name = p ? p.name : null; out._assignee = p || null; }
+  return out;
+};
+app.post('/admin/api/tasks', requireAdmin, express.json({ limit: '40kb' }), async (req, res) => {
+  try {
+    const me = taskMe(req), people = await taskPeople(), d = taskIn(req.body || {}, people);
+    if (!d.title) return res.json({ ok: false, error: 'Napište, co je potřeba udělat' });
+    const r = await q('INSERT INTO lu_tasks (title, description, status, priority, assignee_key, assignee_name, creator_key, creator_name, due_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
+      [d.title, d.description || null, d.status || 'todo', d.priority || 'normal', d.assignee_key || null, d.assignee_name || null, me.key, me.name, d.due_date || null]);
+    const t = r.rows[0];
+    taskLog(t.id, 'create', me, 'Založil úkol' + (t.assignee_name ? ' a zadal ho: ' + t.assignee_name : ''));
+    if (d._assignee && d._assignee.key !== me.key) taskNotify(d._assignee, '📋 Nový úkol od ' + me.name, t.title + (t.due_date ? ' · termín ' + new Date(t.due_date).toLocaleDateString('cs-CZ') : '') + (t.priority === 'urgent' || t.priority === 'high' ? ' · priorita ' + TASK_PRI[t.priority].toLowerCase() : ''), t.id);
+    res.json({ ok: true, task: t });
+  } catch (e) { console.warn('[lu] task create:', e.message); res.json({ ok: false, error: 'Uložení se nepovedlo' }); }
+});
+app.post('/admin/api/tasks/:id(\\d+)', requireAdmin, express.json({ limit: '40kb' }), async (req, res) => {
+  try {
+    const me = taskMe(req), people = await taskPeople();
+    const old = (await q('SELECT * FROM lu_tasks WHERE id=$1', [req.params.id])).rows[0]; if (!old) return res.json({ ok: false, error: 'Úkol nenalezen' });
+    const d = taskIn(req.body || {}, people); if (d.title === '') return res.json({ ok: false, error: 'Název nesmí být prázdný' });
+    const asg = d._assignee; delete d._assignee;
+    const keys = Object.keys(d).filter((k) => String(d[k] == null ? '' : d[k]) !== String(old[k] == null ? '' : (k === 'due_date' && old[k] ? new Date(old[k]).toISOString().slice(0, 10) : old[k])));
+    if (!keys.length) return res.json({ ok: true, task: old });
+    const sets = keys.map((k, i) => k + '=$' + (i + 2)); const vals = keys.map((k) => d[k]);
+    if (keys.includes('status')) sets.push(d.status === 'done' ? 'done_at=now()' : 'done_at=NULL');
+    const t = (await q('UPDATE lu_tasks SET ' + sets.join(', ') + ', updated_at=now() WHERE id=$1 RETURNING *', [req.params.id].concat(vals))).rows[0];
+    const ch = [];
+    if (keys.includes('status')) ch.push('stav: ' + (TASK_ST[old.status] || old.status) + ' → ' + TASK_ST[t.status]);
+    if (keys.includes('assignee_key')) ch.push('řešitel: ' + (old.assignee_name || 'nikdo') + ' → ' + (t.assignee_name || 'nikdo'));
+    if (keys.includes('priority')) ch.push('priorita: ' + TASK_PRI[t.priority]);
+    if (keys.includes('due_date')) ch.push('termín: ' + (t.due_date ? new Date(t.due_date).toLocaleDateString('cs-CZ') : 'bez termínu'));
+    if (keys.includes('title') || keys.includes('description')) ch.push('upravil zadání');
+    taskLog(t.id, keys.includes('status') ? 'status' : 'change', me, ch.join(' · '));
+    const creator = people.find((p) => p.key === t.creator_key) || (t.creator_key ? { key: t.creator_key, email: /@/.test(t.creator_key) ? t.creator_key : null, pid: /^pid:/.test(t.creator_key) ? Number(t.creator_key.slice(4)) : null } : null);
+    const assignee = people.find((p) => p.key === t.assignee_key) || null;
+    if (keys.includes('assignee_key') && asg && asg.key !== me.key) taskNotify(asg, '📋 Úkol pro vás od ' + me.name, t.title + (t.due_date ? ' · termín ' + new Date(t.due_date).toLocaleDateString('cs-CZ') : ''), t.id);
+    else if (assignee && assignee.key !== me.key && (keys.includes('due_date') || keys.includes('priority') || keys.includes('description') || keys.includes('title') || (keys.includes('status') && t.status === 'cancel'))) taskNotify(assignee, '✏️ Změna úkolu: ' + t.title, me.name + ' — ' + ch.join(', '), t.id);
+    if (keys.includes('status') && creator && creator.key !== me.key) taskNotify(creator, (t.status === 'done' ? '✅ Hotovo: ' : '🔄 ' + TASK_ST[t.status] + ': ') + t.title, me.name + ' změnil stav úkolu na „' + TASK_ST[t.status] + '“', t.id);
+    res.json({ ok: true, task: t });
+  } catch (e) { console.warn('[lu] task update:', e.message); res.json({ ok: false, error: 'Uložení se nepovedlo' }); }
+});
+app.post('/admin/api/tasks/:id(\\d+)/comment', requireAdmin, express.json({ limit: '20kb' }), async (req, res) => {
+  try {
+    const me = taskMe(req), text = String((req.body || {}).text || '').trim().slice(0, 5000); if (!text) return res.json({ ok: false, error: 'Napište komentář' });
+    const t = (await q('SELECT * FROM lu_tasks WHERE id=$1', [req.params.id])).rows[0]; if (!t) return res.json({ ok: false, error: 'Úkol nenalezen' });
+    await taskLog(t.id, 'comment', me, text); await q('UPDATE lu_tasks SET updated_at=now() WHERE id=$1', [t.id]);
+    const people = await taskPeople(); const notified = new Set([me.key]);
+    [t.assignee_key, t.creator_key].forEach((k) => { if (!k || notified.has(k)) return; notified.add(k); const p = people.find((x) => x.key === k) || { key: k, email: /@/.test(k) ? k : null, pid: /^pid:/.test(k) ? Number(k.slice(4)) : null }; taskNotify(p, '💬 ' + me.name + ' k úkolu: ' + t.title, text.slice(0, 200), t.id); });
+    res.json({ ok: true });
+  } catch (e) { res.json({ ok: false, error: 'Komentář se nepodařilo uložit' }); }
+});
+app.post('/admin/api/tasks/:id(\\d+)/delete', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
+  try {
+    const me = taskMe(req), t = (await q('SELECT creator_key FROM lu_tasks WHERE id=$1', [req.params.id])).rows[0]; if (!t) return res.json({ ok: false, error: 'Úkol nenalezen' });
+    if (t.creator_key && t.creator_key !== me.key) return res.json({ ok: false, error: 'Smazat může jen ten, kdo úkol založil. Můžete ho přepnout na „Zrušeno“.' });
+    await q('DELETE FROM lu_tasks WHERE id=$1', [req.params.id]); res.json({ ok: true });
+  } catch (e) { res.json({ ok: false, error: 'Smazání se nepovedlo' }); }
+});
+app.get('/admin/tasks', requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store').send(`<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Úkoly — Laundry Unlimited</title>
+<style>${ADMIN_CSS}${BAR_CSS}${TASK_CSS}</style></head><body>${topBar({ mode: 'admin', active: 'ukoly' })}
+<div class="adm"><div class="tkh"><h3>Úkoly týmu</h3><button class="btn sm" id="tk-new" type="button">＋ Nový úkol</button><span class="mut" id="tk-st"></span></div>
+<div class="tkq" id="tk-q"></div>
+<div class="tkw"><table id="tk" class="tkt"></table></div></div>
+<script src="/admin/column-filters.js"></script><script src="/admin/tasks.js"></script></body></html>`);
+});
+const TASK_CSS = `.adm{max-width:none;padding:22px}.mut{color:var(--mut);font-size:13px}
+:root{--border:var(--line);--text2:var(--mut);--surface2:#0b1630}
+.tkh{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0 6px}.tkh h3{margin:0}
+.tkq{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 14px}.tkq button{background:#07111f;border:1px solid var(--line);color:var(--text);border-radius:999px;padding:6px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:auto}.tkq button.on{border-color:var(--cy);background:rgba(34,230,255,.12);color:#fff}.tkq button b{color:#7f93b5;font-weight:600;margin-left:4px}
+.tkw{overflow:auto;border:1px solid var(--line);border-radius:14px;background:rgba(8,15,30,.6)}.tkw .cf-info{padding:10px 14px 4px;margin:0!important}
+.tkt{width:100%;border-collapse:separate;border-spacing:0}.tkt th{position:sticky;top:0;background:#0b1630;z-index:2;text-align:left;padding:10px 8px;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}.tkt .cf-filter-row th{position:static;padding:4px 6px 8px}
+.tkt td{padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.06);font-size:14px;vertical-align:middle}.tkt tbody tr{cursor:pointer}.tkt tbody tr:hover td{background:rgba(34,230,255,.04)}.tkt tr.dn td{opacity:.55}
+.tkt .tt{font-weight:700;color:#fff}.tkt .ds{font-size:12px;color:var(--mut);max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}.s-todo{background:rgba(34,211,238,.15);color:#67e8f9}.s-doing{background:rgba(96,165,250,.18);color:#93c5fd}.s-waiting{background:rgba(251,191,36,.16);color:#fcd34d}.s-done{background:rgba(34,197,94,.18);color:#86efac}.s-cancel{background:rgba(148,163,184,.16);color:#cbd5e1}
+.p-high{color:#fdba74;font-weight:700}.p-urgent{color:#fca5a5;font-weight:800}.p-low{color:#7f93b5}.late{color:#fca5a5;font-weight:700}
+.tkt select.st{background:#07111f;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:13px;padding:5px 6px;width:auto;cursor:pointer}
+.mov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:40px 14px}.mbox{position:relative;width:min(760px,100%);background:#0b1630;border:1px solid var(--line);border-radius:18px;padding:24px 26px}
+.mbox h3{margin:0 0 14px;padding-right:34px}.mbox .mx{position:absolute;top:12px;right:14px;background:none;border:0;color:var(--mut);font-size:22px;cursor:pointer;width:auto}
+.mbox label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px;text-transform:uppercase;letter-spacing:.04em}.mrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.mbox textarea{min-height:110px;resize:vertical}.mact{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:18px;flex-wrap:wrap}.mer{color:#fca5a5;font-size:13px;margin-top:8px}
+.lg{margin-top:22px;border-top:1px solid var(--line);padding-top:14px}.lg h4{margin:0 0 10px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#8eeaff}
+.li{padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#07111f}.li .h{font-size:12px;color:var(--mut)}.li .h b{color:#dbe7ff}.li.sys{background:transparent;border-style:dashed;font-size:13px;color:var(--mut)}.li .t{white-space:pre-wrap;margin-top:3px}
+.cm{display:flex;gap:8px;margin-top:10px;align-items:flex-end}.cm textarea{min-height:60px}`;
 // ── Modelace business modelu: plátno s myšlenkovou mapou ────────────────────
 let MODEL_JS = null;
 // ── Rozdělení financí ──
