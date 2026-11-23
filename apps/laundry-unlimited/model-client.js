@@ -565,12 +565,20 @@
   // jednoduchý Markdown (tučné, nadpisy, odrážky, číslování) — vstup se nejdřív escapuje
   function mdLite(t) {
     var out = [], list = null;
+    // technická ID uzlů se v textu nikdy neukazují: ID v závorce se odstraní, ostatní se nahradí textem uzlu
+    t = String(t || '');
+    var idsRe = S.nodes.length ? new RegExp('\\s*\\(\\s*(?:`?(?:' + S.nodes.map(function (n) { return n.id.replace(/[^\w-]/g, ''); }).filter(Boolean).join('|') + ')`?\\s*[,;]?\\s*)+\\)', 'g') : null;
+    if (idsRe) {
+      t = t.replace(idsRe, '');
+      t = t.replace(new RegExp('`?\\b(' + S.nodes.map(function (n) { return n.id.replace(/[^\w-]/g, ''); }).filter(Boolean).join('|') + ')\\b`?', 'g'), function (_, id) { var n = nodeById(id); return n ? '„' + short(n.text, 40) + '“' : ''; });
+    }
+    t = t.replace(/`([^`]+)`/g, '$1');
     var inl = function (x) { return esc(x).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<i>$2</i>'); };
     var close = function () { if (list) { out.push('</' + list + '>'); list = null; } };
-    String(t || '').split(/\r?\n/).forEach(function (ln) {
+    t.split(/\r?\n/).forEach(function (ln) {
       var m;
       if ((m = /^\s*[-•*]\s+(.*)$/.exec(ln))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inl(m[1]) + '</li>'); }
-      else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(ln))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push('<li>' + inl(m[1]) + '</li>'); }
+      else if ((m = /^\s*(\d+)[.)]\s+(.*)$/.exec(ln))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push('<li value="' + m[1] + '">' + inl(m[2]) + '</li>'); }
       else if ((m = /^\s*#{1,4}\s+(.*)$/.exec(ln)) || (m = /^\s*\*\*([^*]+?)\*\*:?\s*$/.exec(ln))) { close(); out.push('<div class="mh">' + esc(m[1].replace(/\*\*/g, '')) + '</div>'); }
       else if (!ln.trim()) { close(); }
       else { close(); out.push('<p>' + inl(ln) + '</p>'); }
