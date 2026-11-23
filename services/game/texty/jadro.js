@@ -16,7 +16,7 @@
   'use strict';
 
   var ZDROJ = 'cs';                 // v téhle řeči se texty píšou
-  var JAZYKY = ['cs', 'en', 'pl', 'de', 'es', 'fr', 'pt'];
+  var JAZYKY = ['cs', 'en', 'pl', 'de', 'es', 'fr', 'pt', 'it'];
 
   // ─── Množné číslo ─────────────────────────────────────────────────────────
   // Každá řeč jinak. Čeština tři tvary (1 / 2–4 / 5 a víc), angličtina,
@@ -44,6 +44,7 @@
     // Brazilská portugalština bere nulu stejně jako francouzština:
     // 0 lavanderia, ne 0 lavanderias.
     if (jazyk === 'fr' || jazyk === 'pt') return (a === 0 || a === 1) ? 'one' : 'other';
+    // Italština, angličtina, němčina, španělština: jednotné jen pro jedničku.
     return a === 1 ? 'one' : 'other';
   }
 
@@ -51,7 +52,7 @@
   // Čeština píše 1 234 567, angličtina 1,234,567, polština zase po svém.
   // Měna zůstává L$ ve všech — je to herní měna, ne koruna ani zlotý.
   var LOCALE = { cs: 'cs-CZ', en: 'en-GB', pl: 'pl-PL', de: 'de-DE', es: 'es-ES',
-                 fr: 'fr-FR', pt: 'pt-BR' };
+                 fr: 'fr-FR', pt: 'pt-BR', it: 'it-IT' };
   function locale(jazyk) { return LOCALE[jazyk] || LOCALE[ZDROJ]; }
   function cislo(n, jazyk) {
     var x = Math.round(Number(n) || 0);

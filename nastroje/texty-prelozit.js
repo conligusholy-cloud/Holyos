@@ -49,6 +49,7 @@ const JAZYKY = {
   pt: { nazev: 'brazilské portugalštiny',
     tvary: 'one a other. Pozor: portugalština bere jako jednotné číslo i nulu,'
       + ' takže tvar one platí pro 0 i 1 (0 lavanderia, ne 0 lavanderias)' },
+  it: { nazev: 'italštiny', tvary: 'one a other (italština nemá few ani many)' },
 };
 
 const ZADANI = `Překládáš texty počítačové hry Laundromat Tycoon z češtiny do {JAZYK}.

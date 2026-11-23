@@ -73,6 +73,14 @@ obrazovky, je to text pro hráče a překládat se má.
 Tvrdé nálezy **zastaví commit** (háček v `nastroje/hooks`). Chybějící překlad
 ne — rozdělanou větu musí jít uložit.
 
+## Jazyky, které hra umí
+
+`cs` (zdroj), `en`, `pl`, `de`, `es`, `fr`, `pt` (brazilská), `it`.
+
+Hráči se nabízí jen ten, který je přeložený aspoň z poloviny — viz
+`jazykyHotove()` v `index.js`. Rozdělaný překlad vypadá jako rozbitá hra:
+česká věta s cizí vlajkou.
+
 ## Co udělat navíc pro třetí jazyk
 
 - Doplnit tvary množného čísla do `TVARY` v `nastroje/texty-prohlidka.js`.

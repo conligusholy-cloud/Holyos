@@ -31,7 +31,11 @@
     "texty:prelozit:es": "node nastroje/texty-prelozit.js --jazyk=es",
     "texty:prohlidka:es": "node nastroje/texty-prohlidka.js es",
     "texty:prelozit:fr": "node nastroje/texty-prelozit.js --jazyk=fr",
-    "texty:prohlidka:fr": "node nastroje/texty-prohlidka.js fr"
+    "texty:prohlidka:fr": "node nastroje/texty-prohlidka.js fr",
+    "texty:prelozit:pt": "node nastroje/texty-prelozit.js --jazyk=pt",
+    "texty:prohlidka:pt": "node nastroje/texty-prohlidka.js pt",
+    "texty:prelozit:it": "node nastroje/texty-prelozit.js --jazyk=it",
+    "texty:prohlidka:it": "node nastroje/texty-prohlidka.js it"
   },
   "engines": {
     "node": ">=22.0.0"
