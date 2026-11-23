@@ -41,6 +41,16 @@
   function freqSel(v) { return '<select class="fin">' + FREQ.map(function (f) { return '<option value="' + f[0] + '"' + ((v || '') === f[0] ? ' selected' : '') + '>' + f[1] + '</option>'; }).join('') + '</select>'; }
   function parseAmt(v) { if (v === '' || v == null) return null; var x = Number(String(v).replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '')); return isFinite(x) ? Math.min(1e12, Math.round(x * 100) / 100) : null; }
   function fmtAmt(x) { if (typeof x !== 'number') return ''; var p = x.toFixed(2).replace(/\.00$/, '').split('.'); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0'); return p.join(','); }
+  function parsePct(v) { if (v === '' || v == null) return null; var x = Number(String(v).replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '')); return isFinite(x) ? Math.min(1000, Math.round(x * 100) / 100) : null; }
+  function showPct(r) { if (typeof r.pct === 'number') return r.pct; return (r.price > 0 && typeof r.amt === 'number') ? Math.round(r.amt / r.price * 10000) / 100 : null; }
+  // propojení: % z ceny ↔ částka (při změně ceny zůstává %, pokud je zadané)
+  function syncRow(tr, r, src) {
+    if (src === 'pct' && r.price > 0 && typeof r.pct === 'number') r.amt = Math.round(r.price * r.pct) / 100;
+    else if (src === 'amt' && r.price > 0 && typeof r.amt === 'number') r.pct = Math.round(r.amt / r.price * 10000) / 100;
+    else if (src === 'price' && r.price > 0) { if (typeof r.pct === 'number') r.amt = Math.round(r.price * r.pct) / 100; else if (typeof r.amt === 'number') r.pct = Math.round(r.amt / r.price * 10000) / 100; }
+    if (src === 'pct' && typeof r.pct !== 'number') { /* smazáno */ }
+    [['pct', fmt(showPct(r))], ['amt', fmtAmt(r.amt)]].forEach(function (x) { var el = tr.querySelector('.ain[data-f="' + x[0] + '"]'); if (el && el !== document.activeElement) el.value = x[1]; });
+  }
   function rowSum(r) { var s = 0, any = false; D.cols.forEach(function (c) { var x = r.v && r.v[c.id]; if (typeof x === 'number') { s += x; any = true; } }); return any ? Math.round(s * 100) / 100 : null; }
   function sumChip(r) {
     var s = rowSum(r); if (s == null) return '<span class="fxc n">—</span>';
@@ -51,11 +61,11 @@
 
   // ── Vykreslení ──
   function render() {
-    var t = $('#fx'), h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cr">Cena <span class="sub">z čeho se počítá</span></th><th class="cm">Volné prostředky na rozdělení <span class="dph">EUR · bez DPH</span></th><th class="cf">Frekvence</th>';
+    var t = $('#fx'), h = '<thead><tr><th class="c0">#</th><th class="cn">Co se dělí (řádek)</th><th class="cr">Cena <span class="sub">z čeho se počítá</span></th><th class="cm">Volné prostředky na rozdělení <span class="dph">EUR · bez DPH</span><span class="sub">% z ceny&nbsp;&nbsp;|&nbsp;&nbsp;částka</span></th><th class="cf">Frekvence</th>';
     D.cols.forEach(function (c) { h += '<th class="cp"><div class="ch"><input class="hin" data-c="' + c.id + '" value="' + esc(c.name) + '" maxlength="60" title="Název pozice"><button type="button" class="x" data-dc="' + c.id + '" title="Odebrat pozici">✕</button></div></th>'; });
     h += '<th class="cs">Součet</th><th class="ca"></th></tr></thead><tbody>';
     D.rows.forEach(function (r, i) {
-      h += '<tr data-r="' + r.id + '"><td class="c0">' + (i + 1) + '</td><td class="cn"><input class="rin" data-f="name" value="' + esc(r.name) + '" maxlength="200" placeholder="např. Prodej prádlomatu"></td><td class="cr"><span class="pc"><input class="ain" data-f="price" value="' + esc(fmtAmt(r.price)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Cena, ze které se volné prostředky vypočítávají (EUR)"><i>€</i></span></td><td class="cm"><span class="pc"><input class="ain" data-f="amt" value="' + esc(fmtAmt(r.amt)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Volné prostředky na rozdělení v EUR, bez DPH (editovatelné)"><i>€</i></span></td><td class="cf">' + freqSel(r.freq) + '</td>';
+      h += '<tr data-r="' + r.id + '"><td class="c0">' + (i + 1) + '</td><td class="cn"><input class="rin" data-f="name" value="' + esc(r.name) + '" maxlength="200" placeholder="např. Prodej prádlomatu"></td><td class="cr"><span class="pc"><input class="ain" data-f="price" value="' + esc(fmtAmt(r.price)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Cena, ze které se volné prostředky vypočítávají (EUR)"><i>€</i></span></td><td class="cm"><div class="sp"><span class="pc"><input class="ain" data-f="pct" value="' + esc(fmt(showPct(r))) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Kolik % z ceny jsou volné prostředky na rozdělení"><i>%</i></span><span class="pc"><input class="ain" data-f="amt" value="' + esc(fmtAmt(r.amt)) + '" inputmode="decimal" autocomplete="off" placeholder="0" title="Volné prostředky na rozdělení v EUR, bez DPH (editovatelné)"><i>€</i></span></div></td><td class="cf">' + freqSel(r.freq) + '</td>';
       D.cols.forEach(function (c) { var x = r.v && r.v[c.id]; h += '<td class="cp"><span class="pc"><input class="vin" data-c="' + c.id + '" value="' + esc(fmt(typeof x === 'number' ? x : null)) + '" inputmode="decimal" autocomplete="off"><i>%</i></span></td>'; });
       h += '<td class="cs">' + sumChip(r) + '</td><td class="ca"><button type="button" class="ib" data-eq="' + r.id + '" title="Rozdělit rovným dílem">⚖</button><button type="button" class="ib" data-up="' + r.id + '" title="Posunout nahoru">↑</button><button type="button" class="ib" data-dn="' + r.id + '" title="Posunout dolů">↓</button><button type="button" class="ib" data-dr="' + r.id + '" title="Smazat řádek">🗑</button></td></tr>';
     });
@@ -75,11 +85,11 @@
       var v = num(t.value); r.v = r.v || {}; if (v == null) delete r.v[t.getAttribute('data-c')]; else r.v[t.getAttribute('data-c')] = v;
       updateRowSum(tr); changed();
     } else if (t.classList.contains('fin')) { if (t.value) r.freq = t.value; else delete r.freq; changed(); }
-    else if (t.classList.contains('ain')) { var a = parseAmt(t.value), fk = t.getAttribute('data-f') === 'price' ? 'price' : 'amt'; if (a == null) delete r[fk]; else r[fk] = a; changed(); }
+    else if (t.classList.contains('ain')) { var fk = t.getAttribute('data-f'), a = fk === 'pct' ? parsePct(t.value) : parseAmt(t.value); if (a == null) delete r[fk]; else r[fk] = a; syncRow(tr, r, fk); changed(); }
     else if (t.classList.contains('rin')) { r[t.getAttribute('data-f')] = t.value; changed(); }
   });
   tbl.addEventListener('focusout', function (ev) { var t = ev.target;
-    if (t.classList && t.classList.contains('ain')) { var ar = D.rows.filter(function (x) { return x.id === t.closest('tr').getAttribute('data-r'); })[0]; t.value = ar ? fmtAmt(ar[t.getAttribute('data-f') === 'price' ? 'price' : 'amt']) : ''; return; }
+    if (t.classList && t.classList.contains('ain')) { var ar = D.rows.filter(function (x) { return x.id === t.closest('tr').getAttribute('data-r'); })[0]; var fk2 = t.getAttribute('data-f'); t.value = ar ? (fk2 === 'pct' ? fmt(showPct(ar)) : fmtAmt(ar[fk2])) : ''; return; }
     if (t.classList && t.classList.contains('vin')) { var tr = t.closest('tr'), r = D.rows.filter(function (x) { return x.id === tr.getAttribute('data-r'); })[0], x = r && r.v && r.v[t.getAttribute('data-c')]; t.value = fmt(typeof x === 'number' ? x : null); } });
   tbl.addEventListener('click', function (ev) {
     var b = ev.target.closest && ev.target.closest('button'); if (!b) return;

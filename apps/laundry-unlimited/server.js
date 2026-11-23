@@ -904,7 +904,7 @@ const finClean = (d) => {
   const rows = (Array.isArray(d && d.rows) ? d.rows : []).slice(0, 300).map((r) => {
     const v = {}; Object.keys((r && r.v) || {}).forEach((k) => { const x = Number(r.v[k]); if (ids.has(k) && isFinite(x)) v[k] = Math.max(0, Math.min(100, Math.round(x * 100) / 100)); });
     const amt = Number(r.amt);
-    return { id: idc(r.id), name: str(r.name, 200), freq: ['once', 'tx', 'day', 'week', 'month', 'quarter', 'year'].includes(r.freq) ? r.freq : undefined, amt: r.amt != null && r.amt !== '' && isFinite(amt) && amt >= 0 ? Math.min(1e12, Math.round(amt * 100) / 100) : undefined, price: r.price != null && r.price !== '' && isFinite(Number(r.price)) && Number(r.price) >= 0 ? Math.min(1e12, Math.round(Number(r.price) * 100) / 100) : undefined, v };
+    return { id: idc(r.id), name: str(r.name, 200), freq: ['once', 'tx', 'day', 'week', 'month', 'quarter', 'year'].includes(r.freq) ? r.freq : undefined, amt: r.amt != null && r.amt !== '' && isFinite(amt) && amt >= 0 ? Math.min(1e12, Math.round(amt * 100) / 100) : undefined, pct: r.pct != null && r.pct !== '' && isFinite(Number(r.pct)) && Number(r.pct) >= 0 ? Math.min(1000, Math.round(Number(r.pct) * 100) / 100) : undefined, price: r.price != null && r.price !== '' && isFinite(Number(r.price)) && Number(r.price) >= 0 ? Math.min(1e12, Math.round(Number(r.price) * 100) / 100) : undefined, v };
   }).filter((r) => r.id);
   return { cols, rows };
 };
@@ -933,7 +933,7 @@ const FIN_CSS = `
 #fx th{position:sticky;top:0;background:#0b1630;z-index:2;text-align:left;padding:10px 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--line)}
 #fx td{padding:6px 5px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:middle}
 #fx tbody tr:hover td{background:rgba(34,230,255,.04)}
-#fx .c0{width:34px;color:var(--mut);text-align:center}#fx .cn{width:17%}#fx .cr{width:150px}#fx .cm{width:172px}#fx .sub{display:block;margin-top:2px;font-size:10.5px;letter-spacing:.03em;text-transform:none;color:#6f84a6;font-weight:500}#fx .cf{width:132px}#fx .cp{min-width:0}#fx .cs{width:112px;white-space:nowrap}#fx .ca{width:104px;white-space:nowrap;text-align:right}
+#fx .c0{width:34px;color:var(--mut);text-align:center}#fx .cn{width:17%}#fx .cr{width:150px}#fx .cm{width:250px}#fx .sp{display:flex;gap:4px}#fx .sp .pc{flex:1;min-width:0}#fx .sub{display:block;margin-top:2px;font-size:10.5px;letter-spacing:.03em;text-transform:none;color:#6f84a6;font-weight:500}#fx .cf{width:132px}#fx .cp{min-width:0}#fx .cs{width:112px;white-space:nowrap}#fx .ca{width:104px;white-space:nowrap;text-align:right}
 #fx .ain{text-align:right;font-variant-numeric:tabular-nums;padding-right:26px}#fx .dph{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;background:rgba(251,191,36,.16);color:#fcd34d;font-size:10.5px;letter-spacing:.04em;vertical-align:middle}
 #fx select.fin{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 6px;width:100%;box-sizing:border-box;cursor:pointer}#fx select.fin:hover{border-color:var(--line)}#fx select.fin:focus{outline:none;border-color:var(--cy)}#fx select.fin option{background:#0b1630}
 #fx input{background:#07111f;border:1px solid transparent;border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:7px 9px;width:100%;box-sizing:border-box}
