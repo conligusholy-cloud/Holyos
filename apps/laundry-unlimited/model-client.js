@@ -287,7 +287,11 @@
   };
   $('#mb-ren').onclick = function () {
     if (!board) return; var name = prompt('Nový název plátna:', board.name); if (!name || name === board.name) return;
-    req('/admin/api/model/boards/' + board.id + '/rename', { name: name }).then(function (j) { if (!j.ok) { alert(j.error || 'Chyba'); return; } board.name = j.name; var b = boards.find(function (x) { return x.id === board.id; }); if (b) b.name = j.name; fillBoards(); $('#mb-title').textContent = j.name; });
+    req('/admin/api/model/boards/' + board.id + '/rename', { name: name }).then(function (j) { if (!j.ok) { alert(j.error || 'Chyba'); return; } var oldName = board.name; board.name = j.name;
+      // Úvodní uzel nese název plátna — při přejmenování plátna se přepíše i on (jen pokud ho nikdo ručně nezměnil)
+      var renamed = false; S.nodes.forEach(function (n) { if (String(n.text || '').trim() === String(oldName).trim()) { n.text = j.name; renamed = true; } });
+      if (renamed) { renderAll(); commit(); }
+      var b = boards.find(function (x) { return x.id === board.id; }); if (b) b.name = j.name; fillBoards(); $('#mb-title').textContent = j.name; });
   };
   $('#mb-delb').onclick = function () {
     if (!board || boards.length < 2) { alert('Poslední plátno nejde smazat.'); return; }
