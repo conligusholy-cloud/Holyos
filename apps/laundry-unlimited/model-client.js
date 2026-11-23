@@ -562,6 +562,21 @@
       return '<div>✂ zrušit spojení ' + esc(nm(o.od[0])) + ' → ' + esc(nm(o['do'][0])) + '</div>';
     }).join('');
   }
+  // jednoduchý Markdown (tučné, nadpisy, odrážky, číslování) — vstup se nejdřív escapuje
+  function mdLite(t) {
+    var out = [], list = null;
+    var inl = function (x) { return esc(x).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<i>$2</i>'); };
+    var close = function () { if (list) { out.push('</' + list + '>'); list = null; } };
+    String(t || '').split(/\r?\n/).forEach(function (ln) {
+      var m;
+      if ((m = /^\s*[-•*]\s+(.*)$/.exec(ln))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inl(m[1]) + '</li>'); }
+      else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(ln))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push('<li>' + inl(m[1]) + '</li>'); }
+      else if ((m = /^\s*#{1,4}\s+(.*)$/.exec(ln)) || (m = /^\s*\*\*([^*]+?)\*\*:?\s*$/.exec(ln))) { close(); out.push('<div class="mh">' + esc(m[1].replace(/\*\*/g, '')) + '</div>'); }
+      else if (!ln.trim()) { close(); }
+      else { close(); out.push('<p>' + inl(ln) + '</p>'); }
+    });
+    close(); return out.join('');
+  }
   function chatRender() {
     var body = $('#mb-ai-body'), h = '';
     if (!CH.msgs.length) {
@@ -571,8 +586,9 @@
     }
     CH.msgs.forEach(function (m, i) {
       if (m.role === 'user') { h += '<div class="cb u">' + esc(m.text) + '</div>'; return; }
-      h += '<div class="cb a"' + (m.err ? ' style="color:#fca5a5"' : '') + '>' + esc(m.text);
+      h += '<div class="cb a' + (m.err ? '' : ' md') + '"' + (m.err ? ' style="color:#fca5a5;white-space:pre-wrap"' : '') + '>' + (m.err ? esc(m.text) : mdLite(m.text));
       if (m.zmeny && m.zmeny.length) h += '<div class="chg"><b>Navržené změny na plátně:</b>' + opDescribe(m.zmeny) + '<button type="button" class="ap" data-i="' + i + '"' + (m.applied ? ' disabled' : '') + '>' + (m.applied ? 'Provedeno ✓' : '✓ Provést na plátně') + '</button></div>';
+      if (i === CH.msgs.length - 1 && !CH.busy && m.quick && m.quick.length) h += '<div class="chips">' + m.quick.map(function (q) { return '<button type="button" data-send="' + esc(q) + '">' + esc(q) + '</button>'; }).join('') + '</div>';
       h += '</div>';
     });
     if (CH.busy) h += '<div class="cb a m">Poradce přemýšlí…</div>';
@@ -591,7 +607,7 @@
     req('/admin/api/model/boards/' + bid + '/chat', { data: S, message: text, history: hist, brief: chBrief() }).then(function (j) {
       CH.busy = false; if (!board || board.id !== bid) return;
       if (!j.ok) CH.msgs.push({ role: 'assistant', text: j.error || 'Poradce neodpověděl — zkus to znovu.', err: true });
-      else CH.msgs.push({ role: 'assistant', text: String(j.odpoved || ''), zmeny: cleanOps(j.zmeny) });
+      else CH.msgs.push({ role: 'assistant', text: String(j.odpoved || ''), zmeny: cleanOps(j.zmeny), quick: arr(j.rychle).map(String).slice(0, 4) });
       chSave(); if (AI.tab === 'a') aiRender();
     }).catch(function () { CH.busy = false; CH.msgs.push({ role: 'assistant', text: 'Spojení se serverem se přerušilo — zkus to znovu.', err: true }); if (AI.tab === 'a') aiRender(); });
   }

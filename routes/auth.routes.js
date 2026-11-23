@@ -561,6 +561,8 @@ router.post('/lu/model-chat', express.json({ limit: '700kb' }), async (req, res,
       '',
       'JAK PRACUJEŠ:',
       '- Česky, přátelsky a věcně, stručně. Ptej se na nejvýš 1–2 věci najednou; začni tím, co blokuje spuštění nejvíc. Neodříkávej celou mapu.',
+      '- FORMÁT ODPOVĚDI (pole "odpoved" je Markdown, vždy přehledně strukturované, max ~120 slov): krátké sekce s nadpisem v **tučném** na samostatném řádku, odrážky "- ", číslované otázky "1. ". Typická struktura: **Co z mapy vím** (2–4 odrážky) → **Co nesedí / chybí** (odrážky; jen pokud něco je) → **Potřebuji od tebe** (1–2 číslované otázky). U otázek s výběrem uveď varianty jako odrážky A/B/C a doporuč jednu. Žádné dlouhé souvislé odstavce.',
+      '- Pole "rychle_odpovedi": 0–4 krátké (max 60 znaků) hotové odpovědi, které může Tomáš jedním kliknutím poslat (např. "A – bonus pro operátora", "B – sleva pro majitele", "Nevím, navrhni ty"). Dávej je jen když otázka má jasné varianty.',
       '- Z mapy vyplývají otázky (uzly s ???, chybějící ceny, nejasné kdo platí). Vedeš rozhovor tak, aby se postupně všechny zodpověděly a rozhodnutí se zapsala do mapy.',
       '- Hlídáš LOGIKU A TOK: upozorni hned, když zjistíš rozpor (dvě různé hodnoty téhož, uzel bez návaznosti, chybějící krok mezi dvěma uzly, nejasný tok peněz, kruh bez výstupu, něco, co se neshoduje s dřívějším rozhodnutím v rozhovoru).',
       '- Čísla a rozhodnutí si NEVYMÝŠLÍŠ. Když ti je Tomáš neřekl, zeptej se. Můžeš nabídnout rozumnou variantu, ale výslovně jako návrh k potvrzení — do mapy zapisuj jen to, co Tomáš potvrdil nebo sám řekl.',
@@ -574,7 +576,7 @@ router.post('/lu/model-chat', express.json({ limit: '700kb' }), async (req, res,
       '{"op":"pridat_spojeni","od":"id","do":"id"}',
       '{"op":"smazat_spojeni","od":"id","do":"id"}',
       '',
-      'Vrať POUZE jeden JSON objekt (bez markdownu): {"odpoved":"text pro Tomáše","zmeny":[…]}',
+      'Vrať POUZE jeden JSON objekt (bez bloku ```): {"odpoved":"Markdown text pro Tomáše (konce řádků jako \\n)","rychle_odpovedi":["…"],"zmeny":[…]}',
     ].join('\n');
     const ctx = 'AKTUÁLNÍ MAPA „' + name + '" (stav právě teď):\n' + graph + (brief ? '\n\nSTRUČNÝ ROZBOR Z DŘÍVĚJŠKA (kontext, může být zastaralý):\n' + brief : '') + '\n\nTOMÁŠOVA ZPRÁVA:\n' + message;
     const Anthropic = require('@anthropic-ai/sdk');
@@ -583,9 +585,14 @@ router.post('/lu/model-chat', express.json({ limit: '700kb' }), async (req, res,
     const r = await messagesCreate(client, { model: process.env.LU_MODEL_AI || 'claude-sonnet-4-6', max_tokens: 5000, system, messages: clean.concat([{ role: 'user', content: ctx }]) });
     const text = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
     let out = luParseLoose(text);
-    if (!out || typeof out !== 'object') out = { odpoved: text.replace(/^```json|```$/g, '').trim() || 'Nepodařilo se mi odpovědět — zkus to znovu.', zmeny: [] };
+    if (!out || typeof out !== 'object' || typeof out.odpoved !== 'string') {
+      // JSON se nepodařilo přečíst — zkusíme vytáhnout aspoň text odpovědi, ať se uživateli nezobrazí surový JSON
+      let txt = ''; const mm = /"odpoved"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text);
+      if (mm) { try { txt = JSON.parse('"' + mm[1].replace(/\r?\n/g, '\\n') + '"'); } catch (e) { txt = mm[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'); } }
+      out = { odpoved: txt || (text.trim().startsWith('{') ? 'Odpověď se nepodařilo přečíst — zkus otázku zopakovat.' : text.trim()), zmeny: [], rychle_odpovedi: [] };
+    }
     const zm = (Array.isArray(out.zmeny) ? out.zmeny : []).slice(0, 40);
-    res.json({ ok: true, odpoved: String(out.odpoved || '').slice(0, 6000), zmeny: zm });
+    res.json({ ok: true, odpoved: String(out.odpoved || '').slice(0, 6000), zmeny: zm, rychle: (Array.isArray(out.rychle_odpovedi) ? out.rychle_odpovedi : []).map((x) => String(x).slice(0, 80)).filter(Boolean).slice(0, 4) });
   } catch (err) { next(err); }
 });
 

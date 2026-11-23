@@ -931,7 +931,8 @@ const MODEL_CSS = `
 #mb-ai-body label.it{display:flex;gap:9px;align-items:flex-start;cursor:pointer}#mb-ai-body label.it input{margin-top:3px;width:auto}
 .aiin{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);align-items:flex-end}#mb-ai-in{flex:1;resize:none;min-height:42px;max-height:140px;border-radius:10px;border:1px solid var(--line);background:#07111f;color:var(--text);font:inherit;font-size:13.5px;padding:9px 11px;width:auto}
 #mb-ai-p .aiin button{padding:10px 14px;background:linear-gradient(90deg,#22e6ff,#2f7bff);color:#04101c;border:0;font-size:13px}#mb-ai-p .aiin button:disabled{opacity:.5}
-.cb{max-width:92%;margin:0 0 10px;padding:9px 12px;border-radius:12px;white-space:pre-wrap;word-break:break-word}.cb.u{margin-left:auto;background:rgba(34,230,255,.16);border:1px solid rgba(34,230,255,.35)}.cb.a{background:#0d1b30;border:1px solid var(--line)}
+.cb{max-width:92%;margin:0 0 10px;padding:9px 12px;border-radius:12px;white-space:pre-wrap;word-break:break-word}.cb.md{white-space:normal}.cb.md p{margin:0 0 6px}.cb.md ul,.cb.md ol{margin:3px 0 8px;padding-left:19px}.cb.md li{margin:2px 0}.cb .mh{font-weight:700;color:#8eeaff;font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;margin:9px 0 4px}.cb .mh:first-child{margin-top:0}.cb .chips{margin:10px 0 0}
+.cb.u{margin-left:auto;background:rgba(34,230,255,.16);border:1px solid rgba(34,230,255,.35)}.cb.a{background:#0d1b30;border:1px solid var(--line)}
 .cb .chg{margin-top:8px;padding:8px 10px;border-radius:9px;background:#07111f;border:1px solid var(--line);font-size:12.5px;white-space:normal}.cb .chg div{margin:2px 0}.cb .chg .ap{width:100%;margin-top:8px;padding:8px!important;background:linear-gradient(90deg,#22e6ff,#2f7bff)!important;color:#04101c!important;border:0!important}.cb .chg .ap:disabled{background:#14304a!important;color:#86efac!important}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.chips button{border-radius:999px!important;font-size:12px!important}
 #mb-ai-body .ask{margin-top:6px;font-size:11.5px!important;padding:3px 9px!important}
@@ -1018,7 +1019,7 @@ app.post('/admin/api/model/boards/:id(\\d+)/chat', requireAdmin, express.json({ 
       body: JSON.stringify({ name: nm ? nm.name : 'Business model', graph: modelGraphText(d), message, history: Array.isArray(b.history) ? b.history.slice(-14) : [], brief: String(b.brief || '').slice(0, 6000) }), signal: AbortSignal.timeout(150000) });
     let j = {}; try { j = await resp.json(); } catch (e) { /* bez těla */ }
     if (!resp.ok || !j.ok) return res.json({ ok: false, error: j.error || ('HolyOS odpovědělo ' + resp.status) });
-    res.json({ ok: true, odpoved: j.odpoved, zmeny: j.zmeny || [] });
+    res.json({ ok: true, odpoved: j.odpoved, zmeny: j.zmeny || [], rychle: j.rychle || [] });
   } catch (e) { console.warn('[lu] model chat:', e.message); res.json({ ok: false, error: e.name === 'TimeoutError' ? 'Odpověď trvala příliš dlouho — zkuste to znovu' : 'Poradce neodpověděl: ' + e.message }); }
 });
 app.post('/admin/api/model/boards/:id(\\d+)/rename', requireAdmin, express.json({ limit: '2kb' }), async (req, res) => {
