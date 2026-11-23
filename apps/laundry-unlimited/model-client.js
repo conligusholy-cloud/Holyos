@@ -73,13 +73,17 @@
       d.style.left = n.x + 'px'; d.style.top = n.y + 'px'; d.style.setProperty('--c', n.color || COLORS[0]);
       if (n.w || n.h) { d.classList.add('sized'); if (n.w) d.style.width = n.w + 'px'; if (n.h) d.style.height = n.h + 'px'; }
       var fm = document.createElement('div'); fm.className = 'fmt';
-      fm.innerHTML = '<button type="button" data-f="dn" title="Menší písmo">A−</button><span class="fz">' + (n.fz || 15) + '</span><button type="button" data-f="up" title="Větší písmo">A+</button><button type="button" data-f="b" class="fb' + (n.b ? ' on' : '') + '" title="Tučně">B</button>';
+      fm.innerHTML = '<button type="button" data-f="dn" title="Menší písmo">A−</button><span class="fz">' + (n.fz || 15) + '</span><button type="button" data-f="up" title="Větší písmo">A+</button><button type="button" data-f="b" class="fb' + (n.b ? ' on' : '') + '" title="Tučně">B</button>'
+        + [['l', 'Zarovnat doleva', '3,6 21,6 3,12 15,12 3,18 18,18'], ['c', 'Zarovnat na střed', '3,6 21,6 6,12 18,12 4.5,18 19.5,18'], ['r', 'Zarovnat doprava', '3,6 21,6 9,12 21,12 6,18 21,18']].map(function (a) {
+          var p = a[2].split(' '), dd = ''; for (var i = 0; i < p.length; i += 2) dd += 'M' + p[i] + ' L' + p[i + 1] + ' ';
+          return '<button type="button" data-f="al-' + a[0] + '" class="fa' + ((n.al || 'l') === a[0] ? ' on' : '') + '" title="' + a[1] + '"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="' + dd + '"/></svg></button>';
+        }).join('');
       d.appendChild(fm);
       var pb = document.createElement('button'); pb.type = 'button'; pb.className = 'ed'; pb.title = 'Upravit text (přepsat název)';
       pb.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'; d.appendChild(pb);
       ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(function (r) { var z = document.createElement('b'); z.className = 'rz rz-' + r; z.setAttribute('data-r', r); d.appendChild(z); });
       var t = document.createElement('div'); t.className = 't'; t.textContent = n.text || ''; d.appendChild(t);
-      if (n.fz) t.style.fontSize = n.fz + 'px'; if (n.b) t.style.fontWeight = '700';
+      if (n.fz) t.style.fontSize = n.fz + 'px'; if (n.b) t.style.fontWeight = '700'; if (n.al === 'c' || n.al === 'r') t.style.textAlign = n.al === 'c' ? 'center' : 'right';
       ['t', 'r', 'b', 'l'].forEach(function (sd) { var h = document.createElement('i'); h.className = 'h h-' + sd; h.setAttribute('data-s', sd); h.title = 'Přetáhni na jiný uzel (nebo do prázdna) pro spojení'; d.appendChild(h); });
       nodesEl.appendChild(d);
     });
@@ -305,9 +309,12 @@
     if (fb) {
       var fn = fb.closest('.n'), fnode = nodeById(fn.getAttribute('data-id')), f = fb.getAttribute('data-f'); if (!fnode) return;
       var cur = fnode.fz || 15, i = 0; FZ.forEach(function (v, k) { if (Math.abs(v - cur) < Math.abs(FZ[i] - cur)) i = k; });
-      if (f === 'up') fnode.fz = FZ[Math.min(FZ.length - 1, i + 1)]; else if (f === 'dn') fnode.fz = FZ[Math.max(0, i - 1)]; else fnode.b = !fnode.b;
+      if (f === 'up') fnode.fz = FZ[Math.min(FZ.length - 1, i + 1)]; else if (f === 'dn') fnode.fz = FZ[Math.max(0, i - 1)]; else if (f === 'b') fnode.b = !fnode.b;
+      else if (f.indexOf('al-') === 0) { var av = f.slice(3); if (av === 'l') delete fnode.al; else fnode.al = av; }
       if (fnode.fz === 15) delete fnode.fz; if (!fnode.b) delete fnode.b;
       var tt = fn.querySelector('.t'); tt.style.fontSize = fnode.fz ? fnode.fz + 'px' : ''; tt.style.fontWeight = fnode.b ? '700' : '';
+      tt.style.textAlign = fnode.al === 'c' ? 'center' : fnode.al === 'r' ? 'right' : '';
+      fn.querySelectorAll('.fa').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-f') === 'al-' + (fnode.al || 'l')); });
       fn.querySelector('.fz').textContent = fnode.fz || 15; fn.querySelector('.fb').classList.toggle('on', !!fnode.b);
       drawEdges(); commit(); return;
     }
