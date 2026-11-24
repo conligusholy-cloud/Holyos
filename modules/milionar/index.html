@@ -1470,7 +1470,7 @@
         var l = j.limit || {};
         var rows = (l.zeme || []).map(function (z) {
           var pct = z.limit ? Math.round(z.zabrano / z.limit * 100) : null;
-          return '<tr><td><b>' + esc(String(z.kod).toUpperCase()) + '</b></td><td class="num">' + (z.obyvatel ? cz(z.obyvatel) : '—') + '</td>'
+          return '<tr><td><b>' + esc(String(z.kod).toUpperCase()) + '</b></td><td class="num">' + (/^[a-z]{2}$/.test(z.kod) ? '<a href="javascript:void(0)" data-lobyv="' + esc(z.kod) + '" title="Kliknutím upravit počet obyvatel" style="color:inherit;text-decoration:underline dotted">' + (z.obyvatel ? cz(z.obyvatel) : 'doplnit') + '</a>' : '—') + '</td>'
             + '<td class="num">' + (z.limit == null ? '<span class="note">bez limitu</span>' : cz(z.limit)) + '</td>'
             + '<td class="num">' + cz(z.zabrano) + (pct != null ? ' <span class="note">(' + pct + ' %)</span>' : '') + '</td>'
             + '<td class="num" style="' + (z.volno === 0 ? 'color:#f87171;font-weight:800' : '') + '">' + (z.volno == null ? '—' : cz(z.volno)) + '</td></tr>';
@@ -1482,6 +1482,11 @@
           + '<button class="btn sm" id="limit-uloz">Uložit</button>'
           + '<button class="btn sm" id="limit-prep" style="background:#1d4ed8;border-color:#1d4ed8;color:#fff">' + (l.zapnuto ? 'Vypnout' : 'Zapnout') + '</button></div>'
           + '<table class="data-table"><thead><tr><th>Země</th><th>Obyvatel</th><th>Limit míst</th><th>Zabráno</th><th>Volno</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        [].forEach.call(document.querySelectorAll('#limit-box [data-lobyv]'), function (a) { a.onclick = function () {
+          var kod = a.getAttribute('data-lobyv'); var v = prompt('Počet obyvatel země ' + kod.toUpperCase() + ' (celé číslo):', a.textContent.replace(/\D/g, ''));
+          if (v == null) return; var n = Number(String(v).replace(/[\s.,]/g, '')); if (!(n >= 0)) { alert('Zadej číslo.'); return; }
+          var o = {}; o[kod] = n; post('/limit-mist', { obyvatele: o }).then(loadLimit).catch(function (e) { alert(e.message); });
+        }; });
         document.getElementById('limit-uloz').onclick = function () {
           post('/limit-mist', { obyvatel_na_misto: Number(document.getElementById('limit-na').value) }).then(loadLimit).catch(function (e) { alert(e.message); });
         };
