@@ -85,18 +85,28 @@ function prstenec(geo) {
     .filter((c) => Number.isFinite(c[0]) && Number.isFinite(c[1]));
 }
 
-// Do kterého okresu patří bod. Nominatim vrací okres jako county, u velkých
-// měst (Praha, Brno) žádný okres není — tam je okresem samo město.
+// Do kterého okresu patří bod — a rovnou jeho obrys. Nominatim vrací okres
+// jako county, u velkých měst (Praha, Brno) žádný okres není a okresem je
+// samo město.
+//
+// Obrys se bere z TÉHOŽ dotazu, ne z pozdějšího hledání podle jména. Hledání
+// „okres Šumperk" vracelo město Šumperk a na mapě pak svítila obec místo
+// okresu — jméno není identita, kdežto objekt, který reverse na zoomu okresu
+// vrátí, okresem opravdu je.
 async function najdiOkres(lat, lon) {
   if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) return null;
   const j = await fetchJson('https://nominatim.openstreetmap.org/reverse?format=jsonv2'
-    + '&zoom=8&addressdetails=1&lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon));
+    + '&zoom=8&addressdetails=1&polygon_geojson=1&lat=' + encodeURIComponent(lat)
+    + '&lon=' + encodeURIComponent(lon), 20000);
   const a = (j && j.address) || null;
   if (!a) return null;
   const nazev = a.county || a.state_district || a.city || a.town || a.municipality || null;
   const zeme = a.country_code || null;
   if (!nazev) return null;
-  return { key: klic(zeme, nazev), nazev: String(nazev), zeme };
+  const body = prstenec(j.geojson);
+  return { key: klic(zeme, nazev), nazev: String(nazev), zeme,
+    lat: Number(j.lat), lon: Number(j.lon),
+    hranice: body && body.length >= 4 ? zjednodus(body, BODU_MAX) : null };
 }
 
 // Hranice okresu. Hledá se jménem — reverse umí vrátit jméno, ale ne obrys.
@@ -121,17 +131,21 @@ async function proOblast(area) {
   if (!o || !o.key) return null;
   await prisma.gameArea.update({ where: { key: area.key },
     data: { okres_key: o.key, okres_nazev: o.nazev } }).catch(() => {});
-  await zajisti(o.key, o.nazev, o.zeme).catch(() => {});
+  // Obrys z téhož dotazu — druhé hledání podle jména se tím ušetří a hlavně
+  // nemůže trefit jiný objekt.
+  await zajisti(o.key, o.nazev, o.zeme, o).catch(() => {});
   return { key: o.key, nazev: o.nazev };
 }
 
 // Řádek okresu i s hranicí. Když se hranice nestáhne, řádek vznikne bez ní
 // a zkusí se příště — mapa to pozná a nakreslí zatím kruh.
-async function zajisti(key, nazev, zeme) {
+async function zajisti(key, nazev, zeme, hotovy) {
   if (!key) return null;
   const mam = await prisma.gameOkres.findUnique({ where: { key } }).catch(() => null);
   if (mam && mam.hranice) return mam;
-  const h = await najdiHranici(nazev || (mam && mam.nazev) || key, zeme || (mam && mam.zeme) || null);
+  const h = (hotovy && hotovy.hranice)
+    ? hotovy
+    : await najdiHranici(nazev || (mam && mam.nazev) || key, zeme || (mam && mam.zeme) || null);
   const data = { nazev: String(nazev || (mam && mam.nazev) || key).slice(0, 120),
     zeme: (zeme || (mam && mam.zeme) || null), lat: h ? h.lat : (mam && mam.lat),
     lon: h ? h.lon : (mam && mam.lon), hranice: h ? h.hranice : ((mam && mam.hranice) || null) };

@@ -101,6 +101,14 @@ ok('hra kreslí polygon', /L\.polygon\(u\.hranice, styl\)/.test(hra));
 ok('a bez hranice zůstane kruh', /L\.circle\(\[u\.lat, u\.lon\], Object\.assign\(\{ radius: UZEMI_R \}/.test(hra));
 ok('polygon se kreslí jen z pořádného obrysu', /u\.hranice\.length >= 4/.test(hra));
 
+// Obrys se musí vzít z téhož dotazu, který okres určil. Hledání podle jména
+// vracelo u „okres Šumperk" město Šumperk a na mapě svítila obec místo okresu.
+ok('okres si nese obrys z reverse',
+  /polygon_geojson=1&lat=/.test(Z) && /hranice: body && body\.length >= 4/.test(Z));
+ok('a hledání podle jména je až záloha',
+  /const h = \(hotovy && hotovy\.hranice\)\s*\?\s*hotovy\s*:\s*await najdiHranici/.test(Z));
+ok('nalezený okres se rovnou uloží i s hranicí', /zajisti\(o\.key, o\.nazev, o\.zeme, o\)/.test(Z));
+
 const schema = cti('prisma/schema.prisma');
 ok('schéma zná okresy', /model GameOkres \{/.test(schema));
 ok('území se klíčuje okresem', /okres_key  String   @unique @map\("area_key"\)/.test(schema));
