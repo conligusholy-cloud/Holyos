@@ -13114,6 +13114,174 @@ function trhPolozka(n, moje) {
       + '</button>'
     + '</div></div>';
 }
+// ─── Market place ────────────────────────────────────────────────────────────
+// Výloha podle měst. Tržiště je seznam všeho odshora dolů — kdo hledá místo
+// v konkrétním městě, musí ho prolistovat. Tady jsou nabídky srovnané podle
+// lokalit a vedle hotových provozoven visí i samotná připravená místa, která
+// se dřív prodat nedala vůbec.
+var MARKET_LOK = null;        // vybraná lokalita, null = všechny
+
+function marketLokality(vse) {
+  var lok = {};
+  (vse || []).forEach(function (n) {
+    var k = n.area_nazev || n.area_key || '—';
+    (lok[k] = lok[k] || []).push(n);
+  });
+  return lok;
+}
+// Co z ceny je na co. Prodávající si marži neříká, vyjde z rozdílu — kupující
+// tím pádem vidí, kolik platí za práci navíc, a ne jen jedno holé číslo.
+function marketRozpis(n) {
+  var poz = Math.max(0, Math.round(n.cena_misto || 0));
+  var pri = Math.max(0, Math.round(n.cena_pripojky || 0));
+  return { pozemek: poz, pripojky: pri, marze: Math.max(0, Math.round((n.cena || 0) - poz - pri)) };
+}
+function marketPolozka(n) {
+  var misto = n.druh === 'misto';
+  var m = MODELS[misto ? (n.model_pro || 'flex') : n.model] || { name: n.model || '' };
+  return '<div class="trh-p">'
+    + '<div class="trh-txt">'
+      + '<div class="trh-hl"><b>' + esc(n.name || tx('hra.misto_5')) + '</b>'
+      + '<b class="' + (n.moje ? 'warn' : 'ok') + '">' + kcFull(n.cena) + '</b></div>'
+      + '<i>' + esc(tx(misto ? 'market.druh_misto' : 'market.druh_provozovna'))
+      + ' · ' + esc(m.name) + (n.moje ? ' · ' + esc(tx('market.moje_nabidka')) : '') + '</i>'
+      + '<i>' + esc(n.firma || n.nick) + (n.pobocka
+          ? ' · ' + esc(tx('market.servis_zajistuje')) + ' ' + esc(n.pobocka) : '') + '</i>'
+      + '<button class="btn ' + (n.moje ? 'sec ' : '') + 'sm" style="width:100%;margin-top:7px" '
+      + 'data-market-n="' + n.id + '">'
+      + esc(n.moje ? tx('hra.prohlednout_a_koupit') : tx('market.koupit')) + '</button>'
+    + '</div></div>';
+}
+function marketSheet() {
+  if (TRH == null) {
+    sheet('<h3>🏬 ' + esc(tx('market.nazev')) + '</h3>'
+      + '<p class="muted small">' + esc(tx('hra.nacitam')) + '</p>');
+    return loadTrh(marketSheet);
+  }
+  var vse = (TRH || []).slice();
+  var lok = marketLokality(vse);
+  var klice = Object.keys(lok).sort();
+  if (MARKET_LOK && !lok[MARKET_LOK]) MARKET_LOK = null;
+  var zobraz = MARKET_LOK ? lok[MARKET_LOK] : vse;
+  // Vlastní nabídky dolů: kupující hledá cizí, svoje zná.
+  zobraz = zobraz.slice().sort(function (a, b) { return (a.moje ? 1 : 0) - (b.moje ? 1 : 0); });
+  var mojePripravena = Object.keys(CLAIMS || {}).filter(function (id) {
+    var c = CLAIMS[id];
+    return c && c.mine && c.pripraveno && !trhMoje(id);
+  });
+  sheet('<h3>🏬 ' + esc(tx('market.nazev')) + '</h3>'
+    + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('market.popis')) + '</p>'
+    + (klice.length > 1
+      ? '<div class="map-prep" style="flex-wrap:wrap;gap:6px;margin-bottom:10px">'
+        + '<button class="' + (MARKET_LOK ? '' : 'on') + '" data-market-lok="">'
+        + esc(tx('market.vse')) + ' (' + vse.length + ')</button>'
+        + klice.map(function (k) {
+            return '<button class="' + (MARKET_LOK === k ? 'on' : '') + '" data-market-lok="' + esc(k) + '">'
+              + esc(k) + ' (' + lok[k].length + ')</button>';
+          }).join('')
+        + '</div>'
+      : '')
+    + (zobraz.length
+        ? '<div class="trh-seznam">' + zobraz.map(marketPolozka).join('') + '</div>'
+        : '<p class="muted small" style="margin-top:12px">' + esc(tx('market.prazdno')) + '</p>')
+    + (ME && ME.unie
+        ? '<button class="btn" id="market-vypsat" style="width:100%;margin-top:14px"'
+          + (mojePripravena.length ? '' : ' disabled') + '>'
+          + esc(tx('market.vypsat_misto')) + '</button>'
+          + '<p class="fine">' + esc(tx('market.jen_unie')) + '</p>'
+        : ''));
+  [].forEach.call($('sheet-body').querySelectorAll('[data-market-lok]'), function (b) {
+    b.onclick = function () {
+      MARKET_LOK = b.getAttribute('data-market-lok') || null;
+      marketSheet();
+    };
+  });
+  [].forEach.call($('sheet-body').querySelectorAll('[data-market-n]'), function (b) {
+    b.onclick = function () {
+      var n = (TRH || []).filter(function (x) { return String(x.id) === b.getAttribute('data-market-n'); })[0];
+      if (!n) return;
+      if (n.druh === 'misto') marketKoupitSheet(n); else trhKoupitSheet(n);
+    };
+  });
+  var v = $('market-vypsat');
+  if (v) v.onclick = function () { marketVypsatSheet(mojePripravena); };
+}
+// Koupě připraveného místa. Stroj se nepřevádí — kupující dostane zábor
+// s nataženými přípojkami a staví na něm sám.
+function marketKoupitSheet(n) {
+  var r = marketRozpis(n);
+  var mam = volnaHotovost(null);
+  var m = MODELS[n.model_pro || 'flex'] || { name: n.model_pro || '' };
+  sheet('<h3>' + esc(n.name || tx('hra.misto_5')) + '</h3>'
+    + '<p class="muted small">' + esc(tx('market.druh_misto')) + ' · ' + esc(n.firma || n.nick)
+    + (n.pobocka ? ' · ' + esc(tx('market.servis_zajistuje')) + ' ' + esc(n.pobocka) : '') + '</p>'
+    + '<div class="kv"><span>' + esc(tx('market.pripraveno_pro')) + '</span><b>' + esc(m.name) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.najem_za_mesic')) + '</span><b>' + kcFull(n.rent || 0) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('market.skore')) + '</span><b>' + (n.score || 0) + ' / 100</b></div>'
+    + '<div class="kv"><span>' + esc(tx('market.rozpis_pozemek')) + '</span><b>' + kcFull(r.pozemek) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('market.rozpis_pripojky')) + '</span><b>' + kcFull(r.pripojky) + '</b></div>'
+    + (r.marze ? '<div class="kv"><span>' + esc(tx('market.rozpis_marze')) + '</span><b>' + kcFull(r.marze) + '</b></div>' : '')
+    + '<div class="kv souhrn"><span>' + esc(tx('market.cena_celkem')) + '</span><b class="'
+    + (n.cena > mam ? 'err' : 'ok') + '">' + kcFull(n.cena) + '</b></div>'
+    + volneHtml(null)
+    + (n.moje
+      ? '<button class="btn sec big" id="mk-stop" style="width:100%;margin-top:10px">'
+        + esc(tx('hra.stahnout_z_nabidky_4')) + '</button>'
+      : (n.cena > mam
+        ? '<p class="fine err">' + esc(tx('drazba.na_tohle_nemas_volnou_hotovost')) + '</p>'
+        : '<button class="btn big" id="mk-go" style="width:100%;margin-top:10px">'
+          + esc(tx('market.koupit')) + ' · ' + kcFull(n.cena) + '</button>')));
+  var g = $('mk-go');
+  if (g) g.onclick = function () {
+    g.disabled = true;
+    apiJson('/trade/trh/' + n.id + '/koupit', {}).then(function (r2) {
+      if (!r2.ok) { g.disabled = false; return toast((r2.j && r2.j.error) || esc(tx('hra.nepovedlo_se_23')), 'err'); }
+      closeSheet();
+      toast(tx('dor.koupil_jsi_misto', { p1: (n.name || '') }), 'ok', true);
+      loadTrh(function () { vyzvedniNasledky(function () { loadClaims(); drawMap(); }); });
+    }).catch(function () { g.disabled = false; toast(esc(tx('mapa.server_neodpovida_3')), 'err'); });
+  };
+  var st = $('mk-stop');
+  if (st) st.onclick = function () {
+    st.disabled = true;
+    apiJson('/trade/trh/' + n.id + '/stahnout', {}).then(function (r2) {
+      if (!r2.ok) { st.disabled = false; return toast((r2.j && r2.j.error) || esc(tx('hra.nepovedlo_se_22')), 'err'); }
+      loadTrh(function () { drawMap(); marketSheet(); });
+    }).catch(function () { st.disabled = false; toast(esc(tx('hra.server_neodpovida_14')), 'err'); });
+  };
+}
+// Vypsání připraveného místa. Nabízí se jen to, co má natažené přípojky
+// a zrovna nevisí — server si pobočku v lokalitě ověří ještě jednou.
+function marketVypsatSheet(ids) {
+  if (!ids || !ids.length) return toast(esc(tx('market.jen_unie')), 'err');
+  sheet('<h3>' + esc(tx('market.vypsat_misto')) + '</h3>'
+    + '<p class="muted small">' + esc(tx('market.vypsat_popis')) + '</p>'
+    + '<label class="fld"><span>' + esc(tx('hra.misto_5')) + '</span><select id="mv-spot" class="inp">'
+    + ids.map(function (id) {
+        var c = CLAIMS[id] || {};
+        return '<option value="' + esc(id) + '">' + esc(c.name || id) + '</option>';
+      }).join('') + '</select></label>'
+    + '<label class="fld"><span>' + esc(tx('market.pripraveno_pro')) + '</span><select id="mv-model" class="inp">'
+    + MODEL_ORDER.map(function (k) {
+        return '<option value="' + esc(k) + '"' + (k === 'flex' ? ' selected' : '') + '>'
+          + esc(MODELS[k].name) + '</option>';
+      }).join('') + '</select></label>'
+    + '<label class="fld"><span>' + esc(tx('market.cena_celkem')) + '</span>'
+    + '<input id="mv-cena" class="inp" type="number" inputmode="numeric" min="1000" step="10000" value="500000"></label>'
+    + '<button class="btn big" id="mv-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('market.vypsat_misto')) + '</button>');
+  $('mv-ok').onclick = function () {
+    var b = $('mv-ok');
+    b.disabled = true;
+    apiJson('/trade/trh', { spot_id: $('mv-spot').value, cena: Number($('mv-cena').value) || 0,
+      model_pro: $('mv-model').value, mesicu: 3 }).then(function (r) {
+      if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_22')), 'err'); }
+      toast(esc(tx('market.vypsano')), 'ok', true);
+      loadTrh(function () { drawMap(); marketSheet(); });
+    }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida_14')), 'err'); });
+  };
+}
+
 function trhSeznamSheet() {
   var vse = TRH || [];
   var cizi = vse.filter(function (n) { return !n.moje; });
@@ -15234,6 +15402,9 @@ if (fondBtn) { fondBtn.classList.remove('hidden'); fondBtn.onclick = fondSheet; 
 // fondu není, a hledat je přes fondy by bylo schované.
 var akcieBtn = document.getElementById('akcie-btn');
 if (akcieBtn) { akcieBtn.classList.remove('hidden'); akcieBtn.onclick = akcieBurzaSheet; }
+// Market place vidí každý — nabízet místa smí jen Unie, kupovat kdokoli.
+var marketBtn = document.getElementById('market-btn');
+if (marketBtn) { marketBtn.classList.remove('hidden'); marketBtn.onclick = marketSheet; }
 [].forEach.call(document.querySelectorAll('[data-zeb]'), function (b) {
   b.onclick = function () {
     ZEB_KAT = b.getAttribute('data-zeb');

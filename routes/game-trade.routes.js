@@ -3876,7 +3876,34 @@ function trhPub(m, ja) {
     lat: m.lat, lon: m.lon, rent: m.rent, zisk: m.zisk, obrat: m.obrat,
     investice: m.investice, cena: m.cena, od: m.od, konci: m.do,
     moje: m.player_id === ja,
+    // Market place: co se nabízí, pro jaký model je místo připravené, rozpis
+    // ceny a čím se prodávající zaručuje za servis.
+    druh: m.druh || 'provozovna', model_pro: m.model_pro || null,
+    cena_misto: m.cena_misto, cena_pripojky: m.cena_pripojky,
+    pobocka: m.pobocka || null, area_key: m.area_key || null,
   };
+}
+
+// Má prodávající v lokalitě pobočku? Pobočky žijí ve stavu hry jako jméno
+// města a souřadnice, ne jako klíč oblasti — berou se tedy obě cesty: shodné
+// jméno, nebo pobočka do osmi kilometrů od místa. Stejných osm kilometrů
+// používá hra, když nabízí, kde ještě pobočku zřídit.
+function kmMezi(a, b) {
+  if (!a || !b || a.lat == null || b.lat == null) return Infinity;
+  const r = Math.PI / 180, R = 6371;
+  const dx = (b.lon - a.lon) * r * Math.cos((a.lat + b.lat) / 2 * r);
+  const dy = (b.lat - a.lat) * r;
+  return Math.sqrt(dx * dx + dy * dy) * R;
+}
+function pobockaVLokalite(st, c, nazevOblasti) {
+  const pob = Array.isArray(st && st.pobocky) ? st.pobocky : [];
+  const jmeno = String(nazevOblasti || '').trim().toLowerCase();
+  for (const b of pob) {
+    if (!b) continue;
+    if (jmeno && String(b.name || '').trim().toLowerCase() === jmeno) return b;
+    if (kmMezi(b, c) <= 8) return b;
+  }
+  return null;
 }
 
 // GET /trade/trh → co je právě na tržišti
@@ -3885,7 +3912,21 @@ router.get('/trade/trh', hrac, api(async (req, res) => {
     where: { koupil_id: null, zruseno_at: null, do: { gt: new Date() } },
     orderBy: { created_at: 'desc' }, take: 200,
   });
-  res.json({ ok: true, trh: rows.map((m) => trhPub(m, req.player.id)) });
+  // Jména lokalit jdou ven s nabídkami: Market place je řadí podle měst a
+  // „praha-6" nad výlohou nikomu nic neřekne.
+  const klice = [...new Set(rows.map((m) => m.area_key).filter(Boolean))];
+  const oblasti = klice.length
+    ? await prisma.gameArea.findMany({ where: { key: { in: klice } },
+      select: { key: true, name: true, country: true } }).catch(() => [])
+    : [];
+  const nazev = new Map(oblasti.map((a) => [a.key, a]));
+  res.json({ ok: true, trh: rows.map((m) => {
+    const a = nazev.get(m.area_key) || null;
+    return Object.assign(trhPub(m, req.player.id), {
+      area_nazev: (a && a.name) || m.area_key || null,
+      zeme: (a && a.country) || null,
+    });
+  }) });
 }));
 
 // POST /trade/trh { spot_id, cena, mesicu, zisk, obrat, investice, plan }
@@ -3900,8 +3941,24 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
   if (!(cena >= 1000) || cena > MAX_CENA) return res.status(400).json({ error: stx(req)('server.cena_musi_byt_aspon_1_000') });
   const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: spot } });
   if (!c || c.player_id !== req.player.id) return res.status(409).json({ error: stx(req)('server.tohle_misto_ti_nepatri') });
-  if (!c.model) return res.status(400).json({ error: stx(req)('server.na_tomhle_miste_zadny_pradlomat_nestoji') });
   if (c.najemce_id) return res.status(409).json({ error: stx(req)('server.pozemek_mas_pronajaty_jinemu_hraci') });
+  // Market place: bez stroje se smí nabídnout jen PŘIPRAVENÉ místo, a jen
+  // tomu, kdo v té lokalitě má pobočku. Prázdná parcela bez přípojek je pro
+  // kupujícího totéž co kus mapy a servis by za ni nikdo nezaručil.
+  const jenMisto = !c.model;
+  let pobocka = null, modelPro = null;
+  if (jenMisto) {
+    if (!c.pripojky) return res.status(400).json({ error: stx(req)('server.na_tomhle_miste_zadny_pradlomat_nestoji') });
+    if (!(await acct._unieSmi(req.player.id))) {
+      return res.status(403).json({ error: stx(req)('server.unie_zatim_nedostupna') });
+    }
+    const oblast = await prisma.gameArea.findUnique({ where: { key: c.area_key },
+      select: { name: true } }).catch(() => null);
+    const pob = pobockaVLokalite(stavu(req.player), c, oblast && oblast.name);
+    if (!pob) return res.status(409).json({ error: stx(req)('server.market_bez_pobocky') });
+    pobocka = String(pob.name || '').slice(0, 80);
+    modelPro = s(b.model_pro, 10) || 'flex';
+  }
   const bezi = await prisma.gameMarket.findFirst({
     where: { spot_id: spot, koupil_id: null, zruseno_at: null, do: { gt: new Date() } } });
   if (bezi) return res.status(409).json({ error: stx(req)('server.tohle_misto_uz_na_trzisti_je') });
@@ -3912,6 +3969,11 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
   const m = await prisma.gameMarket.create({ data: {
     player_id: req.player.id, nick: req.player.nick, firma: req.player.company,
     spot_id: spot, area_key: c.area_key, name: c.name, model: c.model,
+    druh: jenMisto ? 'misto' : 'provozovna', model_pro: modelPro, pobocka,
+    // Rozpis: co je za pozemek a co za přípojky. Zbytek ceny je marže
+    // prodávajícího a tu si hlídá kupující sám.
+    cena_misto: jenMisto ? Math.max(0, Math.round(c.cena || 0)) : null,
+    cena_pripojky: jenMisto ? Math.max(0, Math.round(c.pripojky || 0)) : null,
     kind: s(b.kind, 40) || null, score: Math.max(0, Math.min(100, Math.round(Number(b.score) || 60))),
     lat: c.lat, lon: c.lon, rent: Math.max(0, Math.round(c.rent || 0)),
     zisk: Math.round(Number(b.zisk) || 0), obrat: Math.max(0, Math.round(Number(b.obrat) || 0)),
@@ -3943,7 +4005,11 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
   if (m.player_id === req.player.id) return res.status(400).json({ error: stx(req)('server.vlastni_nabidku_si_nekoupis') });
   // Mezitím mohl prodávající místo prodat jinak nebo o něj přijít.
   const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: m.spot_id } });
-  if (!c || c.player_id !== m.player_id || !c.model) {
+  const jenMisto = (m.druh || 'provozovna') === 'misto';
+  // U hotové provozovny musí stroj pořád stát, u místa naopak pořád nestát —
+  // kdyby na něm prodávající mezitím postavil, kupuje kupující něco jiného,
+  // než co viděl v nabídce.
+  if (!c || c.player_id !== m.player_id || (jenMisto ? !!c.model || !c.pripojky : !c.model)) {
     await prisma.gameMarket.update({ where: { id }, data: { zruseno_at: new Date() } });
     return res.status(409).json({ error: stx(req)('server.pradlomat_uz_prodavajicimu_nepatri_nabidku_jsme') });
   }
@@ -3961,20 +4027,31 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
     SOUBEH.zamkni(zabrano, 'server.tohle_uz_nekdo_koupil');
     await tx.gameSpotClaim.update({ where: { spot_id: m.spot_id },
       data: { player_id: req.player.id, nick: req.player.nick } });
-    const popis = 'prádlomat ' + (m.name || m.spot_id) + ' z tržiště';
+    const popis = jenMisto
+      ? 'připravené místo ' + (m.name || m.spot_id)
+      : 'prádlomat ' + (m.name || m.spot_id) + ' z tržiště';
     const vyr = prodavajici
       ? await doplatDluhZCeny(tx, prodavajici, m.spot_id, m.cena)
       : { davky: [], prodavajicimu: m.cena };
-    await tx.gameDelivery.createMany({ data: ([
-      { player_id: m.player_id, kind: 'unit_remove', spot_id: m.spot_id,
-        popis: 'Prodal jsi ' + popis + ' hráči ' + req.player.nick , text_kod: 'dor.prodal_jsi_hraci', text_data: { p1: popis, p2: req.player.nick }},
-      { player_id: req.player.id, kind: 'unit_add', spot_id: m.spot_id, model: m.model,
-        data: { name: m.name, lat: m.lat, lon: m.lon, rent: m.rent, area_key: m.area_key,
-          kind: m.kind, score: m.score, invest: m.cena, plan: m.plan || null },
-        popis: 'Koupil jsi ' + popis },
+    // U místa se nepřevádí žádná jednotka — mění se jen to, komu zábor patří.
+    // Zprávu ale dostanou oba, jinak by to vypadalo, že se nestalo nic.
+    const jednotky = jenMisto
+      ? [{ player_id: m.player_id, kind: 'zprava', spot_id: m.spot_id,
+          popis: 'Prodal jsi ' + popis + ' hráči ' + req.player.nick,
+          text_kod: 'dor.prodal_jsi_hraci', text_data: { p1: popis, p2: req.player.nick } },
+        { player_id: req.player.id, kind: 'zprava', spot_id: m.spot_id,
+          popis: 'Koupil jsi ' + popis + ' — přípojky jsou natažené, stačí sem postavit stroj',
+          text_kod: 'dor.koupil_jsi_misto', text_data: { p1: m.name || m.spot_id } }]
+      : [{ player_id: m.player_id, kind: 'unit_remove', spot_id: m.spot_id,
+          popis: 'Prodal jsi ' + popis + ' hráči ' + req.player.nick , text_kod: 'dor.prodal_jsi_hraci', text_data: { p1: popis, p2: req.player.nick }},
+        { player_id: req.player.id, kind: 'unit_add', spot_id: m.spot_id, model: m.model,
+          data: { name: m.name, lat: m.lat, lon: m.lon, rent: m.rent, area_key: m.area_key,
+            kind: m.kind, score: m.score, invest: m.cena, plan: m.plan || null },
+          popis: 'Koupil jsi ' + popis }];
+    await tx.gameDelivery.createMany({ data: (jednotky.concat([
       { player_id: req.player.id, kind: 'cash', amount: -m.cena, popis: 'Zaplatil jsi za ' + popis,
         text_kod: 'dor.zaplatil_jsi_za', text_data: { p1: popis } },
-    ].concat(vyr.davky).concat(vyr.prodavajicimu > 0
+    ]).concat(vyr.davky).concat(vyr.prodavajicimu > 0
       ? [{ player_id: m.player_id, kind: 'cash', amount: vyr.prodavajicimu, popis: 'Utržil jsi za ' + popis , text_kod: 'dor.utrzil_jsi_za', text_data: { p1: popis }}]
       : [])) });
   });

@@ -498,6 +498,17 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
+# Market place: výloha podle měst a prodej připraveného místa. U provozovny
+# se převádí stroj, u místa jen zábor — když se to splete, přijde kupující
+# o stroj, nebo dostane ten, co nikdo neprodal.
+if git diff --cached --name-only | grep -qE 'routes/game-trade|public/compounder/game/game|prisma/schema.prisma|services/game/texty/'; then
+  if ! node nastroje/tmarket.js; then
+    echo ""
+    echo "STOP: Market place nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Z čeho území odvádí. Vyúčtování, karta území a žebříček Unie se musí ptát
 # stejně — rozejdou se tiše a hráč pak vidí jiné číslo, než co mu přijde.
 if git diff --cached --name-only | grep -qE 'services/game/unie|routes/game-unie|public/compounder/game/game.js|services/game/texty/'; then

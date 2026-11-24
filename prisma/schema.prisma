@@ -8758,7 +8758,22 @@ model GameMarket {
   spot_id     String    @db.VarChar(120)
   area_key    String?   @db.VarChar(80)
   name        String?   @db.VarChar(160)
+  // Prázdný model = nabízí se jen místo, bez stroje. Stejná úmluva jako
+  // u záborů, kde model bez stroje taky není vyplněný.
   model       String    @db.VarChar(10)
+  // Co se nabízí: hotová provozovna (stroj na místě), nebo připravené místo
+  // s přípojkami a bez stroje. Místo smí vypsat jen hráč v Unii, který má
+  // v té lokalitě pobočku — servis je to jediné, čím se za nabídku zaručuje.
+  druh        String    @default("provozovna") @db.VarChar(16)
+  // Pro jaký model jsou přípojky natažené. Kupující podle toho ví, co si má
+  // objednat, aby mu na místě sedělo.
+  model_pro   String?   @db.VarChar(10)
+  // Rozpis ceny. Platí se jednou, ale kupující má vidět, z čeho se ta jedna
+  // částka skládá — jinak to vypadá jako číslo vycucané z prstu.
+  cena_misto  Int?
+  cena_pripojky Int?
+  // Pobočka, kterou se prodávající zaručuje za servis.
+  pobocka     String?   @db.VarChar(80)
   kind        String?   @db.VarChar(40)
   score       Int       @default(60)
   lat         Float?
