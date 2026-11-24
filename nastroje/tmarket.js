@@ -52,7 +52,7 @@ if (m) {
 
 // ─── Co smí na výlohu ────────────────────────────────────────────────────────
 ok('bez stroje jde vypsat jen připravené místo',
-  /const jenMisto = !c\.model;[\s\S]{0,400}if \(!c\.pripojky\) return/.test(R));
+  /const jenMisto = !c\.model;[\s\S]{0,1600}if \(jenMisto\) \{[\s\S]{0,200}if \(!c\.pripojky\) return/.test(R));
 ok('a jen hráči v Unii', /jenMisto[\s\S]{0,400}acct\._unieSmi\(req\.player\.id\)/.test(R));
 // Market place má být záruka, ne vývěska. Nabízet smí jen ten, kdo za místo
 // v okrese ručí — master území, nebo jeho operátor.
@@ -66,9 +66,11 @@ ok('a jen s pobočkou v lokalitě',
 // Cena stroje se nesmlouvá. Kdyby se uložila k nabídce, zůstalo by viset
 // číslo z doby, kdy stroje stály jinak.
 ok('cena stroje se bere z ceníku, ne z nabídky',
-  /cena_stroj: \(m\.druh === 'se_strojem' && m\.model_pro\)\s*\?\s*\(JMENI\.CENY_STROJU\[m\.model_pro\]/.test(R));
-ok('nabídka si pamatuje, co je zač', /druh: jenMisto \? 'misto' : 'provozovna'/.test(R));
-ok('a rozpis ceny', /cena_misto: jenMisto[\s\S]{0,120}cena_pripojky: jenMisto/.test(R));
+  /cena_stroj: \(m\.druh === 'se_strojem'\)\s*\?\s*\(JMENI\.CENY_STROJU\[m\.model_pro \|\| m\.model\]/.test(R));
+ok('nabídka si pamatuje, co je zač',
+  /druh: jenMisto \? 'misto' : \(seStrojem \? 'se_strojem' : 'provozovna'\)/.test(R));
+ok('a rozpis ceny',
+  /cena_misto: \(jenMisto \|\| seStrojem\)[\s\S]{0,300}cena_pripojky: \(jenMisto \|\| seStrojem\)/.test(R));
 
 // ─── Koupě ───────────────────────────────────────────────────────────────────
 // Mezi vypsáním a koupí mohl prodávající na místě postavit. Pak kupuje
@@ -80,7 +82,7 @@ ok('u místa se nepřevádí žádná jednotka',
 ok('u provozovny se stroj převádí dál', /kind: 'unit_add', spot_id: m\.spot_id, model: m\.model/.test(R));
 ok('zábor přechází na kupujícího v obou případech',
   /await tx\.gameSpotClaim\.update\(\{ where: \{ spot_id: m\.spot_id \},\s*data: \{ player_id: req\.player\.id/.test(R));
-ok('peníze jdou pořád stejnou cestou', /kind: 'cash', amount: -m\.cena/.test(R));
+ok('peníze jdou pořád stejnou cestou', /kind: 'cash', amount: -celkem/.test(R));
 
 // ─── Výloha ──────────────────────────────────────────────────────────────────
 ok('nabídky nesou jméno lokality', /area_nazev: \(a && a\.name\)/.test(R));
@@ -154,9 +156,9 @@ ok('a jestli už na Market place visí', /na_marketu: visi\.has\(c\.spot_id\)/.t
 ok('místa vidí jen master území', /if \(!u\.moje\) continue;/.test(RU));
 
 ok('karta území místa ukazuje', /unieMistaHtml\(u\)/.test(hra));
-// Se strojem je to hotová provozovna a ta patří na tržiště, ne do výlohy.
-ok('nabídnout jde jen připravené místo bez stroje',
-  /var lze = !m\.model && m\.pripojky && !m\.na_marketu;/.test(hra));
+// Holý zábor bez přípojek nabízet nejde — to je kus mapy, ne nabídka.
+ok('nabídnout jde jen připravené místo nebo místo se strojem',
+  /var lze = !m\.na_marketu && \(m\.model \|\| m\.pripojky\);/.test(hra));
 const n = hra.match(/function marketNaklady\(m\) \{[\s\S]*?\n\}/);
 ok('v game.js se našlo: marketNaklady', !!n);
 if (n) {
@@ -175,6 +177,35 @@ if (n) {
 }
 ['unie.moje_mista', 'unie.misto_nabidnout', 'unie.misto_visi', 'market.naklady',
   'market.naklad_hledani', 'market.naklad_pripojky', 'market.naklad_historie'].forEach((k) => {
+  ok('katalog má ' + k, !!KAT[k]);
+});
+
+// ─── Zápůjčka: místo i se strojem ────────────────────────────────────────────
+// Master nabídne místo, na kterém uz jeho stroj stojí. Kupující ho přebírá
+// v chodu a vydělává od první minuty; v ceně má nový stroj za ceník a ten
+// přijde masterovi na sklad. Pro hru je to táž výměna jako „až dojde nový,
+// stroje se prohodí", jen bez čekání a bez evidence, co se může zaseknout.
+ok('zápůjčku smí vypsat jen master nebo operátor',
+  /const seStrojem = !!c\.model && String\(b\.druh \|\| ''\) === 'se_strojem';/.test(R)
+  && /if \(seStrojem\) \{[\s\S]{0,900}server\.market_jen_master/.test(R));
+ok('a jen s pobočkou v lokalitě', /if \(seStrojem\) \{[\s\S]{0,1200}server\.market_bez_pobocky/.test(R));
+ok('v ceně je stroj z ceníku',
+  /const strojCena = seStrojem \? Math\.max\(0, Math\.round\(JMENI\.CENY_STROJU\[m\.model\]/.test(R));
+ok('kupující platí místo i stroj', /const celkem = Math\.max\(0, Math\.round\(m\.cena \+ strojCena\)\);/.test(R)
+  && /kind: 'cash', amount: -celkem/.test(R));
+// Bez tohohle by master o stroj prisel: nechal ho kupujicimu a nedostal nic.
+ok('prodávajícímu přijde nový stroj na sklad',
+  /seStrojem\s*\?\s*\[\{ player_id: m\.player_id, kind: 'stock', model: m\.model, amount: 1/.test(R));
+ok('a stroj na místě přejde kupujícímu', /kind: 'unit_add', spot_id: m\.spot_id, model: m\.model/.test(R));
+
+ok('výloha zápůjčku pozná', /n\.druh === 'se_strojem' \? 'market\.druh_se_strojem'/.test(hra));
+ok('a počítá cenu i se strojem', /kcFull\(r\.celkem\)/.test(hra));
+ok('master ji nabídne z karty území',
+  /var lze = !m\.na_marketu && \(m\.model \|\| m\.pripojky\);/.test(hra)
+  && /druh: zapujcka \? 'se_strojem' : 'misto'/.test(hra));
+['market.druh_se_strojem', 'market.zapujcka_popis', 'market.zapujcka_jak',
+  'market.nabidnout_se_strojem', 'market.stroj_na_miste',
+  'dor.market_stroj_nahrada'].forEach((k) => {
   ok('katalog má ' + k, !!KAT[k]);
 });
 

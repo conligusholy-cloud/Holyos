@@ -7967,10 +7967,26 @@ function unieUzemiKarta(u, nast) {
   var zavazek = '<div class="kv"><span>' + esc(tx('hra.unie_zavazek')) + '</span><b>'
     + cislo1(u.zavazek_pridano) + ' / ' + cislo1(u.zavazek) + '</b></div>';
   if (!u.moje) {
+    // Nabídnutá operátorská licence. Master ji vypíše, ale přijmout ji dosud
+    // nebylo kde — visela v cizí kartě jako údaj, ne jako nabídka.
+    var lic = (u.operator_cena && !u.operator_nick)
+      ? '<div class="kv"><span>' + esc(tx('hra.unie_operator')) + '</span><b>'
+        + esc(tx('veta.unie_nabidnuta_za', { p1: kcFull(u.operator_cena) })) + '</b></div>'
+        + '<p class="fine">' + esc(tx('unie.operator_co_to_je', { p1: u.operator_podil || 60 })) + '</p>'
+        + ((UNIE && UNIE.role && UNIE.role.operator)
+          ? '<button class="btn sm" data-unie-koupit="' + esc(u.okres_key)
+            + '" data-cena="' + u.operator_cena + '">'
+            + esc(tx('unie.operator_koupit')) + '</button>'
+          : '<p class="fine err">' + esc(tx('unie.operator_od', {
+              p1: cislo1((UNIE && UNIE.role && UNIE.role.operator_min) || 10) })) + '</p>')
+      : (u.operator_nick
+        ? '<div class="kv"><span>' + esc(tx('hra.unie_operator')) + '</span><b>'
+          + esc(u.operator_nick) + ' (' + u.operator_podil + ' %)</b></div>'
+        : '');
     return '<div class="card"><div class="row"><h3>' + esc(u.nazev || u.okres_key) + '</h3><b>' + esc(u.master_nick) + '</b></div>'
       + '<div class="kv"><span>' + esc(tx('hra.unie_poplatek')) + '</span><b>' + u.poplatek_pct + ' %</b></div>'
       + '<div class="kv"><span>' + esc(tx('hra.unie_nespokojenost')) + '</span><b>' + u.nespokojenost + ' / 100</b></div>'
-      + nespBar + zavazek + vyzva
+      + nespBar + zavazek + lic + vyzva
       + (u.duvod_vyzvy && !u.vyzyvatel_nick
         ? '<button class="btn sm" data-unie-vyzva="' + esc(u.okres_key) + '" data-licence="' + (u.licence || 0) + '">'
           + esc(tx('hra.unie_vyzvat')) + '</button><p class="fine">' + esc(unieDuvod(u.duvod_vyzvy)) + '</p>'
@@ -8017,16 +8033,17 @@ function unieMistaHtml(u) {
   return '<h4 style="margin:14px 0 2px">' + esc(tx('unie.moje_mista')) + '</h4>'
     + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('unie.moje_mista_popis')) + '</p>'
     + l.map(function (m) {
-        // Nabídnout jde jen připravené místo bez stroje. Se strojem je to
-        // hotová provozovna a ta patří na tržiště, ne do výlohy.
-        var lze = !m.model && m.pripojky && !m.na_marketu;
+        // Nabídnout jde připravené místo bez stroje, nebo místo i se strojem
+        // (zápůjčka) — ten kupující přebere v chodu a masterovi přijde nový
+        // na sklad. Holý zábor bez přípojek nabízet nejde, to je kus mapy.
+        var lze = !m.na_marketu && (m.model || m.pripojky);
         return '<div class="kv"><span>' + esc(m.nazev)
           + ' <i class="muted small">' + esc(m.mesto) + ' · ' + esc(unieMistoStav(m)) + '</i></span>'
           + (m.na_marketu
             ? '<b class="ok">' + esc(tx('unie.misto_visi')) + '</b>'
             : (lze
               ? '<button class="btn sm sec" data-market-mista="' + esc(m.spot_id) + '">'
-                + esc(tx('unie.misto_nabidnout')) + '</button>'
+                + esc(tx(m.model ? 'market.nabidnout_se_strojem' : 'unie.misto_nabidnout')) + '</button>'
               : '<b class="muted">—</b>'))
           + '</div>';
       }).join('');
@@ -8165,6 +8182,15 @@ function bindUnie() {
         (u.mista || []).forEach(function (x) { if (x.spot_id === id) m = x; });
       });
       if (m) marketVypsatMistoSheet(m);
+    };
+  });
+  // Koupě operátorské licence. Platí se masterovi a běžný podíl ze servisu
+  // pak chodí operátorovi — proto to stojí peníze hned.
+  [].forEach.call(box.querySelectorAll('[data-unie-koupit]'), function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute('data-unie-koupit'), cena = Number(b.getAttribute('data-cena')) || 0;
+      posli('/unie/licence/koupit', { okres_key: k }, cena,
+        tx('unie.operator_zaplaceno', { p1: k }), tx('unie.operator_koupena'));
     };
   });
   [].forEach.call(box.querySelectorAll('[data-unie-vypsat]'), function (b) {
@@ -13201,11 +13227,14 @@ function marketRozpis(n) {
 function marketPolozka(n) {
   var misto = n.druh === 'misto';
   var m = MODELS[misto ? (n.model_pro || 'flex') : n.model] || { name: n.model || '' };
+  var r = marketRozpis(n);
+  var druh = misto ? 'market.druh_misto'
+    : (n.druh === 'se_strojem' ? 'market.druh_se_strojem' : 'market.druh_provozovna');
   return '<div class="trh-p">'
     + '<div class="trh-txt">'
       + '<div class="trh-hl"><b>' + esc(n.name || tx('hra.misto_5')) + '</b>'
-      + '<b class="' + (n.moje ? 'warn' : 'ok') + '">' + kcFull(n.cena) + '</b></div>'
-      + '<i>' + esc(tx(misto ? 'market.druh_misto' : 'market.druh_provozovna'))
+      + '<b class="' + (n.moje ? 'warn' : 'ok') + '">' + kcFull(r.celkem) + '</b></div>'
+      + '<i>' + esc(tx(druh))
       + ' · ' + esc(m.name) + (n.moje ? ' · ' + esc(tx('market.moje_nabidka')) : '') + '</i>'
       + '<i>' + esc(n.firma || n.nick) + ' · ' + esc(tx('market.garantuje'))
       + (n.pobocka ? ' · ' + esc(tx('market.servis_zajistuje')) + ' ' + esc(n.pobocka) : '') + '</i>'
@@ -13263,7 +13292,8 @@ function marketSheet() {
     b.onclick = function () {
       var n = (TRH || []).filter(function (x) { return String(x.id) === b.getAttribute('data-market-n'); })[0];
       if (!n) return;
-      if (n.druh === 'misto') marketKoupitSheet(n); else trhKoupitSheet(n);
+      if (n.druh === 'misto' || n.druh === 'se_strojem') marketKoupitSheet(n);
+      else trhKoupitSheet(n);
     };
   });
   var v = $('market-vypsat');
@@ -13274,25 +13304,28 @@ function marketSheet() {
 function marketKoupitSheet(n) {
   var r = marketRozpis(n);
   var mam = volnaHotovost(null);
-  var m = MODELS[n.model_pro || 'flex'] || { name: n.model_pro || '' };
+  var zapujcka = n.druh === 'se_strojem';
+  var m = MODELS[(zapujcka ? (n.model_pro || n.model) : n.model_pro) || 'flex'] || { name: n.model_pro || '' };
   sheet('<h3>' + esc(n.name || tx('hra.misto_5')) + '</h3>'
-    + '<p class="muted small">' + esc(tx('market.druh_misto')) + ' · ' + esc(n.firma || n.nick)
+    + '<p class="muted small">' + esc(tx(zapujcka ? 'market.druh_se_strojem' : 'market.druh_misto')) + ' · ' + esc(n.firma || n.nick)
     + (n.pobocka ? ' · ' + esc(tx('market.servis_zajistuje')) + ' ' + esc(n.pobocka) : '') + '</p>'
-    + '<div class="kv"><span>' + esc(tx('market.pripraveno_pro')) + '</span><b>' + esc(m.name) + '</b></div>'
+    + (zapujcka ? '<p class="fine ok">' + esc(tx('market.zapujcka_popis')) + '</p>' : '')
+    + '<div class="kv"><span>' + esc(tx(zapujcka ? 'market.stroj_na_miste' : 'market.pripraveno_pro'))
+    + '</span><b>' + esc(m.name) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.najem_za_mesic')) + '</span><b>' + kcFull(n.rent || 0) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('market.skore')) + '</span><b>' + (n.score || 0) + ' / 100</b></div>'
     + '<div class="kv"><span>' + esc(tx('market.rozpis_misto')) + '</span><b>' + kcFull(r.misto) + '</b></div>'
     + (r.stroj ? '<div class="kv"><span>' + esc(tx('market.rozpis_stroj')) + '</span><b>' + kcFull(r.stroj) + '</b></div>' : '')
     + '<div class="kv souhrn"><span>' + esc(tx('market.cena_celkem')) + '</span><b class="'
-    + (n.cena > mam ? 'err' : 'ok') + '">' + kcFull(n.cena) + '</b></div>'
+    + (r.celkem > mam ? 'err' : 'ok') + '">' + kcFull(r.celkem) + '</b></div>'
     + volneHtml(null)
     + (n.moje
       ? '<button class="btn sec big" id="mk-stop" style="width:100%;margin-top:10px">'
         + esc(tx('hra.stahnout_z_nabidky_4')) + '</button>'
-      : (n.cena > mam
+      : (r.celkem > mam
         ? '<p class="fine err">' + esc(tx('drazba.na_tohle_nemas_volnou_hotovost')) + '</p>'
         : '<button class="btn big" id="mk-go" style="width:100%;margin-top:10px">'
-          + esc(tx('market.koupit')) + ' · ' + kcFull(n.cena) + '</button>')));
+          + esc(tx('market.koupit')) + ' · ' + kcFull(r.celkem) + '</button>')));
   var g = $('mk-go');
   if (g) g.onclick = function () {
     g.disabled = true;
@@ -13332,8 +13365,10 @@ function marketNaklady(m) {
 }
 function marketVypsatMistoSheet(m) {
   var n = marketNaklady(m);
-  sheet('<h3>' + esc(tx('market.vypsat_misto')) + '</h3>'
+  var zapujcka = !!m.model;
+  sheet('<h3>' + esc(tx(zapujcka ? 'market.nabidnout_se_strojem' : 'market.vypsat_misto')) + '</h3>'
     + '<p class="muted small">' + esc(m.nazev) + ' · ' + esc(m.mesto) + '</p>'
+    + (zapujcka ? '<p class="fine ok">' + esc(tx('market.zapujcka_jak')) + '</p>' : '')
     + '<h4 style="margin:12px 0 2px">' + esc(tx('market.naklady')) + '</h4>'
     + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('market.naklady_popis')) + '</p>'
     + '<div class="kv"><span>' + esc(tx('market.naklad_hledani')) + '</span><b>' + kcFull(n.hledani) + '</b></div>'
@@ -13345,19 +13380,23 @@ function marketVypsatMistoSheet(m) {
     + '<label class="fld"><span>' + esc(tx('market.rozpis_misto')) + '</span>'
     + '<input id="mv-cena" class="inp" type="number" inputmode="numeric" min="1000" step="10000" value="'
     + Math.max(1000, n.celkem) + '"></label>'
-    + '<label class="fld"><span>' + esc(tx('market.pripraveno_pro')) + '</span><select id="mv-model" class="inp">'
-    + MODEL_ORDER.map(function (k) {
-        return '<option value="' + esc(k) + '"' + (k === 'flex' ? ' selected' : '') + '>'
-          + esc(MODELS[k].name) + '</option>';
-      }).join('') + '</select></label>'
+    + (zapujcka
+      ? '<div class="kv"><span>' + esc(tx('market.stroj_na_miste')) + '</span><b>'
+        + esc((MODELS[m.model] || {}).name || m.model) + '</b></div>'
+      : '<label class="fld"><span>' + esc(tx('market.pripraveno_pro')) + '</span><select id="mv-model" class="inp">'
+        + MODEL_ORDER.map(function (k) {
+            return '<option value="' + esc(k) + '"' + (k === 'flex' ? ' selected' : '') + '>'
+              + esc(MODELS[k].name) + '</option>';
+          }).join('') + '</select></label>')
     + '<p class="fine">' + esc(tx('market.zaruka')) + '</p>'
     + '<button class="btn big" id="mv-ok" style="width:100%;margin-top:10px">'
-    + esc(tx('market.vypsat_misto')) + '</button>');
+    + esc(tx(zapujcka ? 'market.nabidnout_se_strojem' : 'market.vypsat_misto')) + '</button>');
   $('mv-ok').onclick = function () {
     var b = $('mv-ok');
     b.disabled = true;
     apiJson('/trade/trh', { spot_id: m.spot_id, cena: Number($('mv-cena').value) || 0,
-      model_pro: $('mv-model').value, mesicu: 3 }).then(function (r) {
+      druh: zapujcka ? 'se_strojem' : 'misto',
+      model_pro: zapujcka ? m.model : $('mv-model').value, mesicu: 3 }).then(function (r) {
       if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_22')), 'err'); }
       closeSheet();
       toast(esc(tx('market.vypsano')), 'ok', true);

@@ -3885,8 +3885,8 @@ function trhPub(m, ja) {
     // viset číslo z doby, kdy stroje stály jinak. U místa bez stroje je nula.
     // Ceník, ne uložené číslo: Market place slibuje nový stroj za ceníkovou
     // cenu, ne za cenu z doby, kdy se nabídka vypsala.
-    cena_stroj: (m.druh === 'se_strojem' && m.model_pro)
-      ? (JMENI.CENY_STROJU[m.model_pro] || 0) : 0,
+    cena_stroj: (m.druh === 'se_strojem')
+      ? (JMENI.CENY_STROJU[m.model_pro || m.model] || 0) : 0,
     pobocka: m.pobocka || null, area_key: m.area_key || null,
   };
 }
@@ -3954,8 +3954,31 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
   // Market place má být záruka, ne vývěska: kupující si kupuje i to, že se
   // o místo má kdo starat. K tomu pobočka v lokalitě, jinak servis nemá kdo
   // dojet. Prázdná parcela bez přípojek je pro kupujícího totéž co kus mapy.
+  // Zápůjčka: master nabídne místo, na kterém už JEHO stroj stojí. Kupující
+  // ho přebírá v chodu a vydělává od první minuty, v ceně má nový stroj za
+  // ceník a ten masterovi přijde na sklad — tedy si ho odveze na další místo.
+  // Pro hru je to totéž jako „až dojde nový, stroje se vymění", jen bez
+  // čekání a bez evidence, která by se mohla zaseknout v půlce.
+  const seStrojem = !!c.model && String(b.druh || '') === 'se_strojem';
   const jenMisto = !c.model;
   let pobocka = null, modelPro = null;
+  if (seStrojem) {
+    if (!(await acct._unieSmi(req.player.id))) {
+      return res.status(403).json({ error: stx(req)('server.unie_zatim_nedostupna') });
+    }
+    const oblast = await prisma.gameArea.findUnique({ where: { key: c.area_key } }).catch(() => null);
+    const okres = oblast ? await OKRESY.proOblast(oblast).catch(() => null) : null;
+    const uzemi = okres ? await prisma.gameTerritory.findUnique({ where: { okres_key: okres.key } }).catch(() => null) : null;
+    const licence = okres ? await prisma.gameOperatorLicence.findFirst({
+      where: { okres_key: okres.key, player_id: req.player.id, zrusena: false } }).catch(() => null) : null;
+    if (!(uzemi && uzemi.master_id === req.player.id) && !licence) {
+      return res.status(409).json({ error: stx(req)('server.market_jen_master') });
+    }
+    const pob = pobockaVLokalite(stavu(req.player), c, oblast && oblast.name);
+    if (!pob) return res.status(409).json({ error: stx(req)('server.market_bez_pobocky') });
+    pobocka = String(pob.name || '').slice(0, 80);
+    modelPro = c.model;
+  }
   if (jenMisto) {
     if (!c.pripojky) return res.status(400).json({ error: stx(req)('server.na_tomhle_miste_zadny_pradlomat_nestoji') });
     if (!(await acct._unieSmi(req.player.id))) {
@@ -3985,13 +4008,16 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
   const m = await prisma.gameMarket.create({ data: {
     player_id: req.player.id, nick: req.player.nick, firma: req.player.company,
     spot_id: spot, area_key: c.area_key, name: c.name, model: c.model,
-    druh: jenMisto ? 'misto' : 'provozovna', model_pro: modelPro, pobocka,
+    druh: jenMisto ? 'misto' : (seStrojem ? 'se_strojem' : 'provozovna'),
+    model_pro: modelPro, pobocka,
     // U místa si master nacení jedinou věc: co stálo místo najít, připravit
     // a co je na něm navíc (třeba že tu prádlomat už stál a čísla jsou známá).
     // Cena stroje se nesmlouvá — bere se z ceníku, protože Market place slibuje
     // nový stroj, ne bazar.
-    cena_misto: jenMisto ? Math.max(0, Math.round(c.cena || 0)) : null,
-    cena_pripojky: jenMisto ? cena : null,
+    cena_misto: (jenMisto || seStrojem) ? Math.max(0, Math.round(c.cena || 0)) : null,
+    // U zápůjčky je zadaná cena taky jen za místo — stroj se přičte z ceníku
+    // až při zobrazení, aby u nabídky nezůstalo viset staré číslo.
+    cena_pripojky: (jenMisto || seStrojem) ? cena : null,
     kind: s(b.kind, 40) || null, score: Math.max(0, Math.min(100, Math.round(Number(b.score) || 60))),
     lat: c.lat, lon: c.lon, rent: Math.max(0, Math.round(c.rent || 0)),
     zisk: Math.round(Number(b.zisk) || 0), obrat: Math.max(0, Math.round(Number(b.obrat) || 0)),
@@ -4024,6 +4050,11 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
   // Mezitím mohl prodávající místo prodat jinak nebo o něj přijít.
   const c = await prisma.gameSpotClaim.findUnique({ where: { spot_id: m.spot_id } });
   const jenMisto = (m.druh || 'provozovna') === 'misto';
+  const seStrojem = (m.druh || '') === 'se_strojem';
+  // Zápůjčka: v ceně je nový stroj za ceník. Bere se teď, ne z nabídky —
+  // u staré nabídky by jinak zůstalo viset číslo z doby, kdy stroje stály jinak.
+  const strojCena = seStrojem ? Math.max(0, Math.round(JMENI.CENY_STROJU[m.model] || 0)) : 0;
+  const celkem = Math.max(0, Math.round(m.cena + strojCena));
   // U hotové provozovny musí stroj pořád stát, u místa naopak pořád nestát —
   // kdyby na něm prodávající mezitím postavil, kupuje kupující něco jiného,
   // než co viděl v nabídce.
@@ -4047,7 +4078,9 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
       data: { player_id: req.player.id, nick: req.player.nick } });
     const popis = jenMisto
       ? 'připravené místo ' + (m.name || m.spot_id)
-      : 'prádlomat ' + (m.name || m.spot_id) + ' z tržiště';
+      : (seStrojem
+        ? 'místo i se strojem ' + (m.name || m.spot_id)
+        : 'prádlomat ' + (m.name || m.spot_id) + ' z tržiště');
     const vyr = prodavajici
       ? await doplatDluhZCeny(tx, prodavajici, m.spot_id, m.cena)
       : { davky: [], prodavajicimu: m.cena };
@@ -4067,16 +4100,24 @@ router.post('/trade/trh/:id/koupit', hrac, api(async (req, res) => {
             kind: m.kind, score: m.score, invest: m.cena, plan: m.plan || null },
           popis: 'Koupil jsi ' + popis }];
     await tx.gameDelivery.createMany({ data: (jednotky.concat([
-      { player_id: req.player.id, kind: 'cash', amount: -m.cena, popis: 'Zaplatil jsi za ' + popis,
+      { player_id: req.player.id, kind: 'cash', amount: -celkem, popis: 'Zaplatil jsi za ' + popis,
         text_kod: 'dor.zaplatil_jsi_za', text_data: { p1: popis } },
-    ]).concat(vyr.davky).concat(vyr.prodavajicimu > 0
+    // Nový stroj z ceníku jde rovnou na sklad prodávajícímu: ten svůj nechal
+    // kupujícímu, aby vydělával hned, a odveze si místo něj nový. Pro hru je
+    // to táž výměna, jen bez čekání a bez evidence, co se může zaseknout.
+    ]).concat(seStrojem
+      ? [{ player_id: m.player_id, kind: 'stock', model: m.model, amount: 1,
+          popis: 'Nový stroj místo zapůjčeného — ' + (m.name || m.spot_id),
+          text_kod: 'dor.market_stroj_nahrada', text_data: { p1: m.name || m.spot_id } }]
+      : []).concat(vyr.davky).concat(vyr.prodavajicimu > 0
       ? [{ player_id: m.player_id, kind: 'cash', amount: vyr.prodavajicimu, popis: 'Utržil jsi za ' + popis , text_kod: 'dor.utrzil_jsi_za', text_data: { p1: popis }}]
       : [])) });
   });
   } catch (e) { if (SOUBEH.odpoved(e, res, stx(req))) return; throw e; }
 
-  console.log('[game] tržiště prodej: ' + m.nick + ' → ' + req.player.nick + ' · ' + (m.name || m.spot_id) + ' za ' + m.cena + ' L$');
-  res.json({ ok: true, cena: m.cena });
+  console.log('[game] tržiště prodej: ' + m.nick + ' → ' + req.player.nick + ' · ' + (m.name || m.spot_id)
+    + ' za ' + celkem + ' L$' + (seStrojem ? ' (z toho stroj ' + strojCena + ')' : ''));
+  res.json({ ok: true, cena: celkem, stroj: strojCena });
 }));
 
 module.exports = router;
