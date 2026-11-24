@@ -2276,11 +2276,14 @@ async function zemeSPocty() {
 router.get('/leaderboard', async (req, res, next) => {
   try {
     const p = await currentPlayer(req);
-    const [z, zeme, mujFond] = await Promise.all([zebricky(), zemeSPocty(),
+    const [z, zeme, mujFond, uzemi] = await Promise.all([zebricky(), zemeSPocty(),
       // Ve kterém fondu hráč je — ať svou příčku najde, i když se do špičky
       // nevejde. Bez přihlášeného hráče se nehledá nic.
       p ? prisma.gameAlianceClen.findFirst({ where: { player_id: p.id, stav: 'clen' },
         select: { aliance_id: true } }).catch(() => null) : null,
+      // Žebříček území (Unie). Chytá se naprázdno: dokud neproběhla migrace
+      // nebo území nikdo nedrží, zbytek žebříčku se kvůli tomu nerozsype.
+      require('../services/game/unie').zebricekUzemi().catch(() => []),
     ]);
     const orez = (l) => l.slice(0, ZEB_TOP).map((x, i) => ({ poradi: i + 1, id: x.id, nick: x.nick,
       firma: x.firma || (x.nick + ' s.r.o.'), znak: x.znak || null, zeme: x.zeme || [],
@@ -2293,6 +2296,9 @@ router.get('/leaderboard', async (req, res, next) => {
       fondy: (z.fondy || []).slice(0, ZEB_TOP).map((f, i) => ({ poradi: i + 1, id: f.id,
         nazev: f.nazev, clenu: f.clenu, firem: f.firem, pokladna: f.pokladna,
         hodnota: f.hodnota, ja: !!(mujFond && f.id === mujFond.aliance_id) })),
+      uzemi: (uzemi || []).slice(0, ZEB_TOP).map((u, i) => ({ poradi: i + 1, id: u.id,
+        nick: u.nick, uzemi: u.uzemi, cizich: u.cizich, hodnota: u.prijem,
+        operator: !!u.operator, ja: !!(p && u.id === p.id) })),
       aktualizovano: z.aktualizovano || null,
       ja: p ? { pradlomaty: moje(z.pradlomaty, p.id), zisk: moje(z.zisk, p.id),
         pozvanky: moje(z.pozvanky, p.id), jmeni: moje(z.jmeni, p.id),

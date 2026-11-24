@@ -322,9 +322,54 @@ async function uzemiPub(t, meId, nast) {
   };
 }
 
+// ─── Žebříček území ──────────────────────────────────────────────────────────
+// Měřítko pozdní hry. Počet prádlomatů říká, jak velkou máš síť; tenhle
+// žebříček říká, kolik ti nese cizí práce — tedy jestli jsi opravdu master
+// partner, nebo jen velký provozovatel. Řadí se podle měsíčního příjmu ze
+// servisu, ne podle počtu území: deset prázdných oblastí nic neznamená.
+async function zebricekUzemi() {
+  const [uzemi, nast] = await Promise.all([prisma.gameTerritory.findMany(), nastaveni()]);
+  if (!uzemi.length) return [];
+  const klice = uzemi.map((t) => t.area_key);
+  const [mista, licence] = await Promise.all([
+    prisma.gameSpotClaim.findMany({
+      where: { area_key: { in: klice }, model: { not: '' } },
+      select: { area_key: true, player_id: true, model: true, score: true, rent: true, pozemek: true },
+    }),
+    prisma.gameOperatorLicence.findMany({ where: { area_key: { in: klice }, zrusena: false } }),
+  ]);
+  const operatorVOblasti = {};
+  licence.forEach((l) => { if (!operatorVOblasti[l.area_key]) operatorVOblasti[l.area_key] = l; });
+  const podleOblasti = {};
+  mista.forEach((c) => { (podleOblasti[c.area_key] = podleOblasti[c.area_key] || []).push(c); });
+
+  const masteri = {};
+  const operatori = {};
+  uzemi.forEach((t) => {
+    const m = masteri[t.master_id] = masteri[t.master_id]
+      || { id: t.master_id, nick: t.master_nick, uzemi: 0, cizich: 0, prijem: 0 };
+    m.uzemi++;
+    const lic = operatorVOblasti[t.area_key] || null;
+    const opPct = lic ? Math.max(0, Math.min(100, lic.podil_pct)) : 0;
+    (podleOblasti[t.area_key] || []).forEach((c) => {
+      if (c.player_id === t.master_id) return;   // vlastní síť si sám sobě neplatí
+      const r = rozpad(servisMista(c), t.poplatek_pct, opPct, nast.odvod_pct);
+      m.cizich++; m.prijem += r.master;
+      if (lic) {
+        const o = operatori[lic.player_id] = operatori[lic.player_id]
+          || { id: lic.player_id, nick: lic.nick, uzemi: 0, cizich: 0, prijem: 0, operator: true };
+        o.prijem += r.operator; o.cizich++;
+      }
+    });
+  });
+  Object.values(operatori).forEach((o) => { o.uzemi = licence.filter((l) => l.player_id === o.id).length; });
+  const vse = Object.values(masteri).concat(Object.values(operatori));
+  return vse.sort((a, b) => b.prijem - a.prijem || b.cizich - a.cizich);
+}
+
 module.exports = {
   KEY, MESIC_MS, ROK_MS, VYCHOZI,
   nastaveni, ulozNastaveni, role, pocetStroju, potencial,
   nespokojenostZ, duvodVyzvy, servisMista, rozpad,
-  vyuctujUzemi, vyhodnotVyzvu, pridanoOdPrevzeti, uzemiPub,
+  vyuctujUzemi, vyhodnotVyzvu, pridanoOdPrevzeti, uzemiPub, zebricekUzemi,
 };

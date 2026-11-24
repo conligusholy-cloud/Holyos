@@ -61,7 +61,7 @@ function prelozStatickyText() {
   [['data-net', { moje: 'hra.zal_moje_sit', stroje: 'hra.stroje', mista: 'hra.zal_mista', vyvoj: 'hra.zal_vyvoj', zebricek: 'hra.zal_zebricek', unie: 'hra.zal_unie' }],
    ['data-stroj', { zisk: 'hra.zisk', trzby: 'hra.trzby', poruchy: 'hra.zal_poruchy', navratnost: 'mapa.navratnost' }],
    ['data-misto', { vse: 'hra.vse', moje: 'hra.moje', volna: 'hra.zal_volna', cizi: 'hra.zal_konkurence' }],
-   ['data-zeb', { pradlomaty: 'hra.pradlomaty', zisk: 'hra.zisk', jmeni: 'hra.zal_jmeni', fondy: 'hra.zal_fondy', hvezdy: 'hra.zal_hvezdicky', pozvanky: 'hra.zal_pozvanky', zeme: 'hra.zal_zeme' }]
+   ['data-zeb', { pradlomaty: 'hra.pradlomaty', zisk: 'hra.zisk', jmeni: 'hra.zal_jmeni', fondy: 'hra.zal_fondy', hvezdy: 'hra.zal_hvezdicky', pozvanky: 'hra.zal_pozvanky', zeme: 'hra.zal_zeme', uzemi: 'hra.zal_unie_uzemi' }]
   ].forEach(function (g) {
     Object.keys(g[1]).forEach(function (v) { dej('[' + g[0] + '="' + v + '"]', g[1][v]); });
   });
@@ -7881,6 +7881,7 @@ function netZalozka(kam) {
 var UNIE = null;            // poslední přehled ze serveru
 function unieTab() {
   var b = $('net-tab-unie'); if (b) b.classList.toggle('hidden', !(ME && ME.unie));
+  var zb = $('zeb-tab-uzemi'); if (zb) zb.classList.toggle('hidden', !(ME && ME.unie));
   var m = $('uzemi-btn');
   if (m) {
     m.classList.toggle('hidden', !(ME && ME.unie));
@@ -7921,7 +7922,31 @@ function unieRole(d) {
       : tx('veta.unie_do_operatora', { p1: cislo1(Math.max(0, r.operator_min - r.pradlomatu)) }));
   return '<div class="card"><div class="row"><h3>' + esc(stav) + '</h3><b>' + cislo1(r.pradlomatu || 0) + '</b></div>'
     + (dal ? '<p class="fine">' + esc(dal) + '</p>' : '')
-    + '<p class="fine">' + esc(tx('hra.unie_role_popis')) + '</p></div>';
+    + '<p class="fine">' + esc(tx('hra.unie_role_popis')) + '</p></div>'
+    + unieMeritko(d);
+}
+// Měřítko pozdní hry: kolik ti území nesou a kolik je to vlastních prádlomatů.
+// Samotná částka hráči nic neřekne — vedle sta šedesáti strojů vypadá každé
+// číslo malé. Teprve přepočet na jednotky, které zná, dává smysl.
+function unieMeritko(d) {
+  var prijem = (d.uzemi || []).reduce(function (a, u) { return a + (u.moje ? (u.prijem_mesic || 0) : 0); }, 0);
+  var zOperatora = (d.licence || []).reduce(function (a, l) { return a + (l.prijem_mesic || 0); }, 0);
+  var celkem = prijem + zOperatora;
+  // Průměrný měsíční zisk jednoho vlastního prádlomatu — z vlastní sítě,
+  // ne z tabulky: každý hráč staví jinak.
+  var moje = (S.units || []).filter(function (u) { return u.eco && u.eco.profit != null; });
+  var prumer = moje.length
+    ? moje.reduce(function (a, u) { return a + u.eco.profit; }, 0) / moje.length : 0;
+  var jednotek = prumer > 0 ? celkem / prumer : 0;
+  return '<div class="card"><div class="row"><h3>' + esc(tx('hra.unie_meritko')) + '</h3>'
+    + '<b class="' + (celkem ? 'ok' : 'muted') + '">' + kcFull(celkem) + '</b></div>'
+    + '<p class="fine">' + esc(tx('hra.unie_meritko_popis')) + '</p>'
+    + (celkem && prumer > 0
+      ? '<div class="kv"><span>' + esc(tx('hra.unie_jako_pradlomatu')) + '</span><b>'
+        + cislo1(Math.round(jednotek * 10) / 10) + '×</b></div>'
+        + '<p class="fine">' + esc(tx('hra.unie_meritko_cil')) + '</p>'
+      : '<p class="fine">' + esc(tx('hra.unie_meritko_zatim')) + '</p>')
+    + '<button class="odkaz" id="unie-do-zebricku">' + esc(tx('hra.unie_do_zebricku')) + '</button></div>';
 }
 function unieUzemiKarta(u, nast) {
   var pasmo = '<input type="range" class="unie-pct" data-uzemi="' + esc(u.area_key) + '" min="' + u.poplatek_min
@@ -8029,6 +8054,14 @@ function unieZaplat(cena, popis) {
 }
 function bindUnie() {
   var box = $('unie-body'); if (!box) return;
+  var zeb = $('unie-do-zebricku');
+  if (zeb) zeb.onclick = function () {
+    ZEB_KAT = 'uzemi';
+    [].forEach.call(document.querySelectorAll('[data-zeb]'), function (x) {
+      x.classList.toggle('on', x.getAttribute('data-zeb') === 'uzemi');
+    });
+    netZalozka('zebricek');
+  };
   var posli = function (cesta, telo, cena, popis, hotovo) {
     if (cena && !unieZaplat(cena, popis)) return;
     apiJson(cesta, telo).then(function (r) {
@@ -8477,13 +8510,18 @@ var ZEB_POPIS = {
   jmeni: { nadpis: esc(tx('mapa.nejvetsi_ciste_jmeni')), jed: function (v) { return kcFull(v); },
     pod: tx('veta.co_hrac_ma_minus_co_dluzi')},
   fondy: { nadpis: esc(tx('mapa.nejsilnejsi_fondy')), jed: function (v) { return kcFull(v); },
-    pod: tx('veta.pokladna_fondu_plus_podily')}
+    pod: tx('veta.pokladna_fondu_plus_podily')},
+  // Měřítko pozdní hry. Počet prádlomatů říká, jak velkou máš síť; tohle
+  // říká, kolik ti nese cizí práce — jestli jsi master, nebo jen velký
+  // provozovatel. Proto se řadí podle příjmu, ne podle počtu území.
+  uzemi: { nadpis: esc(tx('hra.unie_zeb_nadpis')), jed: function (v) { return kcFull(v); },
+    pod: esc(tx('hra.unie_zeb_pod')) }
 };
 function loadZeb() {
   // Při výpadku nastavíme prázdný žebříček — jinak by panel zůstal viset
   // na „Načítám…" a hráč by nevěděl, že se něco pokazilo.
   var prazdny = { pradlomaty: [], zisk: [], pozvanky: [], jmeni: [], hvezdy: [], fondy: [], zeme: [],
-    ja: null, hracu: 0, chyba: true };
+    uzemi: [], ja: null, hracu: 0, chyba: true };
   return api('/leaderboard')
     .then(function (r) { ZEB = r.ok ? r.j : prazdny; })
     .catch(function () { ZEB = prazdny; });
@@ -8594,6 +8632,18 @@ function hracuSlovy(n) {
   return n + (n === 1 ? ' ' + esc(tx('hra.hrac_4')) : (n >= 2 && n <= 4 ? ' ' + esc(tx('hra.hraci_4')) : ' ' + esc(tx('hra.hracu_4'))));
 }
 // Země místo hráčů: vlaječka, název, rozpis po modelích a celkový počet.
+// Řádek žebříčku území. Vedle příjmu je vidět i to, z čeho vzešel — kolik
+// území a kolik cizích prádlomatů v nich stojí. Bez toho by byl vítěz jen
+// číslo a hráč by nevěděl, čím ho dohnat.
+function uzemiRadek(x) {
+  var role = x.operator ? tx('hra.unie_role_operator') : tx('hra.unie_role_master');
+  return '<div class="zeb-row' + (x.ja ? ' ja' : '') + '"'
+    + (x.id ? ' data-hrac="' + x.id + '"' : '') + '>'
+    + '<i class="poradi' + (x.poradi <= 3 ? ' medaile m' + x.poradi : '') + '">' + x.poradi + '</i>'
+    + '<span class="nick">' + zlocinJmeno(x.id, x.nick)
+    + '<i>' + esc(role) + ' · ' + tx('veta.unie_zeb_radek', { p1: cislo1(x.uzemi), p2: cislo1(x.cizich) }) + '</i></span>'
+    + '<b>' + kcFull(x.hodnota) + '</b></div>';
+}
 function zemeRadek(z) {
   var mod = ['mini', 'flex', 'max'].map(function (k) {
     return '<i class="' + (z[k] ? 'je' : 'nic') + '">' + k.toUpperCase() + ' ' + (z[k] || 0) + '</i>';
@@ -8732,6 +8782,15 @@ function paintZeb() {
             { p1: jaF.poradi, p2: jaF.z, p3: popis.jed(jaF.hodnota) })
         : '');
     fondInfoNapoj(box);
+    return;
+  }
+  if (ZEB_KAT === 'uzemi') {
+    box.innerHTML = '<h3 style="margin:14px 0 2px">' + popis.nadpis + '</h3>'
+      + '<p class="muted small" style="margin:0 0 10px">' + popis.pod + zebKdy() + '</p>'
+      + (list.length
+        ? '<div class="zeb">' + list.map(uzemiRadek).join('') + '</div>'
+        : '<div class="empty">' + esc(tx('hra.unie_zeb_prazdno')) + '</div>')
+      + (list.length ? '<p class="fine">' + esc(tx('hra.unie_zeb_vysvetleni')) + '</p>' : '');
     return;
   }
   if (ZEB_KAT === 'zeme') {
