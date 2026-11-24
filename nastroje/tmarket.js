@@ -142,5 +142,41 @@ const hlava = model.slice(0, 1800);
   ok('tabulka tržiště má ' + s2, new RegExp('\\b' + s2 + '\\b').test(hlava));
 });
 
+// ─── Masterův sklad v kartě území ────────────────────────────────────────────
+// Bez seznamu vlastních míst musí master hledat po mapě, co v okrese vlastně
+// má — a nabízet pak nemá z čeho.
+const RU = cti('routes/game-unie.routes.js');
+ok('server posílá moje místa v území', /u\.mista = claims\.map/.test(RU));
+ok('a jen ta moje', /where: \{ player_id: me\.id, area_key: \{ in: mesta \} \}/.test(RU));
+ok('s tím, co na nich je hotové',
+  /pozemek: !!c\.pozemek[\s\S]{0,200}pripojky: Math\.max\(0, Math\.round\(c\.pripojky/.test(RU));
+ok('a jestli už na Market place visí', /na_marketu: visi\.has\(c\.spot_id\)/.test(RU));
+ok('místa vidí jen master území', /if \(!u\.moje\) continue;/.test(RU));
+
+ok('karta území místa ukazuje', /unieMistaHtml\(u\)/.test(hra));
+// Se strojem je to hotová provozovna a ta patří na tržiště, ne do výlohy.
+ok('nabídnout jde jen připravené místo bez stroje',
+  /var lze = !m\.model && m\.pripojky && !m\.na_marketu;/.test(hra));
+const n = hra.match(/function marketNaklady\(m\) \{[\s\S]*?\n\}/);
+ok('v game.js se našlo: marketNaklady', !!n);
+if (n) {
+  const box2 = { SCOUT_COST: 20000, obhlidkaCena: () => 5000,
+    trhZiskUMe: () => ({ profit: 42000 }) };
+  vm.createContext(box2);
+  vm.runInContext(n[0], box2);
+  let v = box2.marketNaklady({ pripojky: 300000, pozemek_cena: 200000, score: 70, rent: 1000 });
+  ok('náklady se sečtou', v.celkem === v.hledani + v.pripojky + v.pozemek, '— ' + JSON.stringify(v));
+  ok('hledání se odhadne z dnešních cen', v.hledani > 0, '— ' + v.hledani);
+  ok('ověřený provoz se spočítá ze skóre', v.mesicne === 42000);
+  v = box2.marketNaklady({ pripojky: 0, score: null });
+  ok('místo bez čísel nespadne', v.celkem >= 0 && v.mesicne === 0);
+  v = box2.marketNaklady({ pripojky: -5, pozemek_cena: -5, score: null });
+  ok('záporné náklady nevzniknou', v.pripojky === 0 && v.pozemek === 0);
+}
+['unie.moje_mista', 'unie.misto_nabidnout', 'unie.misto_visi', 'market.naklady',
+  'market.naklad_hledani', 'market.naklad_pripojky', 'market.naklad_historie'].forEach((k) => {
+  ok('katalog má ' + k, !!KAT[k]);
+});
+
 console.log(chyb ? '\n' + chyb + ' nesedí' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

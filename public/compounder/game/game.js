@@ -7987,6 +7987,7 @@ function unieUzemiKarta(u, nast) {
     + (u.operator_nick ? esc(u.operator_nick) + ' (' + u.operator_podil + ' %)'
       : (u.operator_cena ? esc(tx('veta.unie_nabidnuta_za', { p1: kcFull(u.operator_cena) })) : '—')) + '</b></div>'
     + unieCoDal(u)
+    + unieMistaHtml(u)
     + '<label class="fine">' + esc(tx('hra.unie_poplatek')) + ': <b data-pct-pro="' + esc(u.okres_key) + '">' + u.poplatek_pct + ' %</b></label>'
     + pasmo
     + '<p class="fine">' + esc(tx('hra.unie_pasmo_popis')) + '</p>'
@@ -8001,6 +8002,34 @@ function unieUzemiKarta(u, nast) {
     + esc(tx('hra.unie_doplatit_licenci')) + '</button>'
     + '<button class="btn sec sm" data-unie-vypsat="' + esc(u.okres_key) + '">' + esc(tx('hra.unie_vypsat_licenci')) + '</button>'
     + '</div>' + vyzva + '</div>';
+}
+// Moje místa v území: co na nich je hotové a co se dá nabídnout dál. Je to
+// masterův sklad — bez něj by musel hledat po mapě, co v okrese vlastně má.
+function unieMistoStav(m) {
+  if (m.model) return tx('unie.misto_stroj', { p1: (MODELS[m.model] || {}).name || m.model });
+  if (m.pripojky) return tx('unie.misto_pripojky');
+  if (m.pozemek) return tx('unie.misto_pozemek');
+  return tx('unie.misto_holé');
+}
+function unieMistaHtml(u) {
+  var l = u.mista || [];
+  if (!l.length) return '';
+  return '<h4 style="margin:14px 0 2px">' + esc(tx('unie.moje_mista')) + '</h4>'
+    + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('unie.moje_mista_popis')) + '</p>'
+    + l.map(function (m) {
+        // Nabídnout jde jen připravené místo bez stroje. Se strojem je to
+        // hotová provozovna a ta patří na tržiště, ne do výlohy.
+        var lze = !m.model && m.pripojky && !m.na_marketu;
+        return '<div class="kv"><span>' + esc(m.nazev)
+          + ' <i class="muted small">' + esc(m.mesto) + ' · ' + esc(unieMistoStav(m)) + '</i></span>'
+          + (m.na_marketu
+            ? '<b class="ok">' + esc(tx('unie.misto_visi')) + '</b>'
+            : (lze
+              ? '<button class="btn sm sec" data-market-mista="' + esc(m.spot_id) + '">'
+                + esc(tx('unie.misto_nabidnout')) + '</button>'
+              : '<b class="muted">—</b>'))
+          + '</div>';
+      }).join('');
 }
 // Co s územím dělat. Hráč, který právě koupil území, kouká na prázdnou kartu
 // a neví, proč ji drží — tohle mu pokaždé řekne jeden další krok.
@@ -8119,6 +8148,19 @@ function bindUnie() {
       unieCastkaSheet(tx('hra.unie_vyzvat'), minimum, function (castka) {
         posli('/unie/uzemi/vyzva', { okres_key: k, cena: castka }, 0, '', tx('hra.unie_vyzva_podana'));
       });
+    };
+  });
+  // Nabídnout místo z karty území. Místo se hledá v tom, co přišlo ze
+  // serveru — cena přípojek a koupené země jsou jen moje věc a jinde je hra
+  // nemá odkud vzít.
+  [].forEach.call(box.querySelectorAll('[data-market-mista]'), function (b) {
+    b.onclick = function () {
+      var id = b.getAttribute('data-market-mista');
+      var m = null;
+      ((UNIE && UNIE.uzemi) || []).forEach(function (u) {
+        (u.mista || []).forEach(function (x) { if (x.spot_id === id) m = x; });
+      });
+      if (m) marketVypsatMistoSheet(m);
     };
   });
   [].forEach.call(box.querySelectorAll('[data-unie-vypsat]'), function (b) {
@@ -13266,6 +13308,60 @@ function marketKoupitSheet(n) {
     }).catch(function () { st.disabled = false; toast(esc(tx('hra.server_neodpovida_14')), 'err'); });
   };
 }
+// Co mě místo stálo. Hledání a obhlídka se u záboru neukládají, tak se berou
+// dnešní ceny — je to odhad, ne účetnictví, a tak je taky popsaný. Historie
+// místa je to, co o něm ví jen majitel: že tu prádlomat stál a kolik nesl.
+function marketNaklady(m) {
+  var hledani = Math.round(SCOUT_COST / 8) + obhlidkaCena();
+  var pripojky = Math.max(0, Math.round(m.pripojky || 0));
+  var pozemek = Math.max(0, Math.round(m.pozemek_cena || 0));
+  // Ověřený provoz: co místo nese při dnešním skóre. Kupující to jinak
+  // nemá odkud vědět a právě za tohle si připlácí.
+  var mesicne = 0;
+  if (m.score != null) {
+    var e = trhZiskUMe({ spot_id: m.spot_id, name: m.nazev, score: m.score,
+      rent: m.rent || 0, model: m.model || 'flex' });
+    mesicne = Math.max(0, Math.round((e && e.profit) || 0));
+  }
+  return { hledani: hledani, pripojky: pripojky, pozemek: pozemek,
+    mesicne: mesicne, celkem: hledani + pripojky + pozemek };
+}
+function marketVypsatMistoSheet(m) {
+  var n = marketNaklady(m);
+  sheet('<h3>' + esc(tx('market.vypsat_misto')) + '</h3>'
+    + '<p class="muted small">' + esc(m.nazev) + ' · ' + esc(m.mesto) + '</p>'
+    + '<h4 style="margin:12px 0 2px">' + esc(tx('market.naklady')) + '</h4>'
+    + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('market.naklady_popis')) + '</p>'
+    + '<div class="kv"><span>' + esc(tx('market.naklad_hledani')) + '</span><b>' + kcFull(n.hledani) + '</b></div>'
+    + (n.pozemek ? '<div class="kv"><span>' + esc(tx('market.naklad_pozemek')) + '</span><b>' + kcFull(n.pozemek) + '</b></div>' : '')
+    + '<div class="kv"><span>' + esc(tx('market.naklad_pripojky')) + '</span><b>' + kcFull(n.pripojky) + '</b></div>'
+    + (n.mesicne ? '<div class="kv"><span>' + esc(tx('market.naklad_historie')) + '</span><b class="ok">'
+        + kcFull(n.mesicne) + esc(tx('market.za_mesic')) + '</b></div>' : '')
+    + '<div class="kv souhrn"><span>' + esc(tx('market.naklady_celkem')) + '</span><b>' + kcFull(n.celkem) + '</b></div>'
+    + '<label class="fld"><span>' + esc(tx('market.rozpis_misto')) + '</span>'
+    + '<input id="mv-cena" class="inp" type="number" inputmode="numeric" min="1000" step="10000" value="'
+    + Math.max(1000, n.celkem) + '"></label>'
+    + '<label class="fld"><span>' + esc(tx('market.pripraveno_pro')) + '</span><select id="mv-model" class="inp">'
+    + MODEL_ORDER.map(function (k) {
+        return '<option value="' + esc(k) + '"' + (k === 'flex' ? ' selected' : '') + '>'
+          + esc(MODELS[k].name) + '</option>';
+      }).join('') + '</select></label>'
+    + '<p class="fine">' + esc(tx('market.zaruka')) + '</p>'
+    + '<button class="btn big" id="mv-ok" style="width:100%;margin-top:10px">'
+    + esc(tx('market.vypsat_misto')) + '</button>');
+  $('mv-ok').onclick = function () {
+    var b = $('mv-ok');
+    b.disabled = true;
+    apiJson('/trade/trh', { spot_id: m.spot_id, cena: Number($('mv-cena').value) || 0,
+      model_pro: $('mv-model').value, mesicu: 3 }).then(function (r) {
+      if (!r.ok) { b.disabled = false; return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_22')), 'err'); }
+      closeSheet();
+      toast(esc(tx('market.vypsano')), 'ok', true);
+      UNIE = null; loadTrh(function () { drawMap(); paintUnie(); });
+    }).catch(function () { b.disabled = false; toast(esc(tx('hra.server_neodpovida_14')), 'err'); });
+  };
+}
+
 // Vypsání připraveného místa. Nabízí se jen to, co má natažené přípojky
 // a zrovna nevisí — server si pobočku v lokalitě ověří ještě jednou.
 function marketVypsatSheet(ids) {

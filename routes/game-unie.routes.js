@@ -79,6 +79,38 @@ router.get('/unie/prehled', requirePlayer, jenUnie, async (req, res, next) => {
     const pub = [];
     for (const t of uzemi) pub.push(await UNIE.uzemiPub(t, me.id, nast));
 
+    // Moje místa v území. Master je potřebuje vidět pohromadě: tohle je
+    // sklad, ze kterého nabízí na Market place, a bez něj by musel hledat
+    // po mapě, co v okrese vlastně má a co na tom je hotové.
+    for (const u of pub) {
+      if (!u.moje) continue;
+      const mesta = await OKRESY.oblasti(u.okres_key);
+      if (!mesta.length) { u.mista = []; continue; }
+      const [claims, nabidky, nazvy] = await Promise.all([
+        prisma.gameSpotClaim.findMany({
+          where: { player_id: me.id, area_key: { in: mesta } },
+          orderBy: { id: 'asc' }, take: 60,
+        }),
+        prisma.gameMarket.findMany({
+          where: { player_id: me.id, koupil_id: null, zruseno_at: null, do: { gt: new Date() } },
+          select: { spot_id: true } }).catch(() => []),
+        prisma.gameArea.findMany({ where: { key: { in: mesta } },
+          select: { key: true, name: true } }).catch(() => []),
+      ]);
+      const visi = new Set(nabidky.map((n) => n.spot_id));
+      const mesto = new Map(nazvy.map((a) => [a.key, a.name]));
+      u.mista = claims.map((c) => ({
+        spot_id: c.spot_id, nazev: c.name || c.spot_id,
+        mesto: mesto.get(c.area_key) || c.area_key,
+        // Co na místě je hotové: koupená zem, natažené přípojky, stojící stroj.
+        pozemek: !!c.pozemek, pozemek_cena: Math.max(0, Math.round(c.cena || 0)),
+        pripojky: Math.max(0, Math.round(c.pripojky || 0)),
+        model: c.model || '', score: c.score == null ? null : c.score,
+        rent: Math.max(0, Math.round(c.rent || 0)),
+        na_marketu: visi.has(c.spot_id),
+      }));
+    }
+
     // Volné oblasti, kde mám prádlomaty: co by stálo je převzít.
     const obsazene = new Set(uzemi.map((t) => t.okres_key));
     const volne = [];
