@@ -2415,3 +2415,50 @@ router.get('/drazby', api(async (req, res) => {
   });
   res.json({ ok: true, drazby: ven });
 }));
+
+// ─── Okresy (území Unie) ─────────────────────────────────────────────────────
+// Kontrola, proč se na mapě místo okresu kreslí kruh. Vypíše, co má každý
+// okres uložené, a s ?znovu=1 zkusí hranici stáhnout znovu a řekne, který
+// zdroj odpověděl a co vrátil. Hádat to z mapy nejde — tam je vidět jen kruh.
+router.get('/okresy', api(async (req, res) => {
+  const OKRESY = require('../services/game/okresy');
+  const okresy = await prisma.gameOkres.findMany({ orderBy: { key: 'asc' } });
+  const radky = okresy.map((o) => ({
+    key: o.key, nazev: o.nazev, zeme: o.zeme, lat: o.lat, lon: o.lon, obyvatel: o.obyvatel,
+    hranice_bodu: Array.isArray(o.hranice) ? o.hranice.length : 0,
+    sousedu: Array.isArray(o.sousedi) ? o.sousedi.length : 0,
+    zmeneno: o.updated_at,
+  }));
+  const out = { ok: true, okresu: okresy.length, okresy: radky };
+  if (!req.query.znovu) return res.json(out);
+
+  // Který okres přetáhnout: ?klic=cz:sumperk, jinak první bez hranice.
+  const chci = String(req.query.klic || '').trim();
+  const cil = chci ? okresy.find((o) => o.key === chci)
+    : (okresy.find((o) => !Array.isArray(o.hranice) || o.hranice.length < 4) || okresy[0]);
+  if (!cil) return res.json(Object.assign(out, { znovu: { chyba: 'Žádný okres v databázi.' } }));
+
+  // Souřadnice: v řádku okresu, nebo z první oblasti, která do něj patří.
+  let lat = cil.lat; let lon = cil.lon;
+  if (lat == null || lon == null) {
+    const a = await prisma.gameArea.findFirst({ where: { okres_key: cil.key } });
+    if (a) { lat = a.lat; lon = a.lon; }
+  }
+  if (lat == null || lon == null) {
+    return res.json(Object.assign(out, { znovu: { key: cil.key, chyba: 'Okres nemá souřadnice ani oblast.' } }));
+  }
+
+  const zprava = await OKRESY.diagnostika(lat, lon, cil.zeme);
+  // Když to vyšlo, rovnou se to uloží — ať se nemusí klikat podruhé.
+  let ulozeno = false;
+  const hotovy = await OKRESY.najdiOkres(lat, lon, cil.zeme).catch(() => null);
+  if (hotovy && hotovy.hranice && hotovy.hranice.length >= 4) {
+    await prisma.gameOkres.update({ where: { key: cil.key },
+      data: { hranice: hotovy.hranice, obyvatel: hotovy.obyvatel || cil.obyvatel || null,
+        nazev: hotovy.nazev || cil.nazev } }).catch(() => {});
+    ulozeno = true;
+  }
+  res.json(Object.assign(out, { znovu: Object.assign({ key: cil.key, ulozeno,
+    nasel_klic: hotovy ? hotovy.key : null,
+    nasel_bodu: hotovy && hotovy.hranice ? hotovy.hranice.length : 0 }, zprava) }));
+}));

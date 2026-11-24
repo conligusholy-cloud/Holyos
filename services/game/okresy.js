@@ -409,6 +409,69 @@ async function prevedStaraUzemi() {
   return kolik;
 }
 
-module.exports = { klic, zjednodus, prstenec, pocetObyvatel, lookup,
+// Diagnostika pro administraci: zkusí po řadě všechny zdroje a řekne, co
+// který vrátil. Bez toho se hádá naslepo — mapa jen mlčky nakreslí kruh.
+async function diagnostika(lat, lon, zemeHint) {
+  const out = { lat: Number(lat), lon: Number(lon), overpass: [], nominatim: null };
+  const dotaz = '[out:json][timeout:60];is_in(' + Number(lat) + ',' + Number(lon) + ')->.a;'
+    + 'rel(pivot.a)["boundary"="administrative"]["admin_level"~"^[67]$"];out tags geom;';
+  for (const url of OVERPASS) {
+    const zacatek = Date.now();
+    const z = { url, ms: 0, stav: null, chyba: null, relaci: 0, vzorek: null };
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 45000);
+      const r = await fetch(url, { method: 'POST', signal: ctrl.signal,
+        headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(dotaz) }).finally(() => clearTimeout(to));
+      z.stav = r.status;
+      if (r.ok) {
+        const j = await r.json();
+        const rely = ((j && j.elements) || []).filter((e) => e.type === 'relation' && e.tags);
+        z.relaci = rely.length;
+        rely.sort((a, b) => Number(a.tags.admin_level || 9) - Number(b.tags.admin_level || 9));
+        if (rely[0]) {
+          const rel = rely[0];
+          const casti = ((rel.members) || []).filter((m) => m.type === 'way' && Array.isArray(m.geometry));
+          const obrys = zRelace(rel);
+          z.vzorek = { id: rel.id, admin_level: rel.tags.admin_level || null,
+            nazev: rel.tags['name:cs'] || rel.tags.name || null,
+            iso: rel.tags['ISO3166-2'] || null, obyvatel: pocetObyvatel({ extratags: rel.tags }),
+            clenu: (rel.members || []).length, cest_s_geometrii: casti.length,
+            sesito_bodu: obrys ? obrys.length : 0,
+            klic: klic((rel.tags['ISO3166-2'] || '').slice(0, 2).toLowerCase()
+              || (zemeHint || '').toLowerCase().slice(0, 2), rel.tags['name:cs'] || rel.tags.name) };
+        }
+      }
+    } catch (e) { z.chyba = String((e && e.message) || e).slice(0, 200); }
+    z.ms = Date.now() - zacatek;
+    out.overpass.push(z);
+    if (z.vzorek && z.vzorek.sesito_bodu >= 4) break;   // první, co dal obrys, stačí
+  }
+  const zacatek = Date.now();
+  const n = { ms: 0, stav: null, chyba: null, nazev: null, osm: null, bodu: 0 };
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 20000);
+    const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+      + '&zoom=8&addressdetails=1&polygon_geojson=1&lat=' + encodeURIComponent(lat)
+      + '&lon=' + encodeURIComponent(lon), { signal: ctrl.signal,
+      headers: { 'User-Agent': UA, 'Accept': 'application/json' } }).finally(() => clearTimeout(to));
+    n.stav = r.status;
+    if (r.ok) {
+      const j = await r.json();
+      const a = (j && j.address) || {};
+      n.nazev = a.county || a.state_district || a.city || a.town || a.municipality || null;
+      n.osm = j.osm_type ? (j.osm_type + '/' + j.osm_id) : null;
+      const body = prstenec(j.geojson);
+      n.bodu = body ? body.length : 0;
+    }
+  } catch (e) { n.chyba = String((e && e.message) || e).slice(0, 200); }
+  n.ms = Date.now() - zacatek;
+  out.nominatim = n;
+  return out;
+}
+
+module.exports = { klic, zjednodus, prstenec, pocetObyvatel, lookup, diagnostika,
   najdiOkres, najdiHranici, proOblast, zajisti, oblasti, proKlice,
   prevedStaraUzemi, sousedi, tezisteObrysu, bodVen, BODU_MAX };
