@@ -103,22 +103,50 @@ async function najdiOkres(lat, lon) {
   const nazev = a.county || a.state_district || a.city || a.town || a.municipality || null;
   const zeme = a.country_code || null;
   if (!nazev) return null;
-  const body = prstenec(j.geojson);
-  return { key: klic(zeme, nazev), nazev: String(nazev), zeme,
+  let body = prstenec(j.geojson);
+  let obyvatel = pocetObyvatel(j);
+  // Reverse umí vrátit i jen bod. Doptat se na geometrii jde podle osm_id —
+  // tedy na TEN objekt, ne na jméno. Hledání podle jména („okres Šumperk")
+  // trefilo město Šumperk a na mapě pak svítila obec.
+  if ((!body || body.length < 4) && j.osm_type && j.osm_id) {
+    const d = await lookup(j.osm_type, j.osm_id);
+    if (d) {
+      body = prstenec(d.geojson) || body;
+      obyvatel = obyvatel || pocetObyvatel(d);
+    }
+  }
+  return { key: klic(zeme, nazev), nazev: String(nazev), zeme, obyvatel,
     lat: Number(j.lat), lon: Number(j.lon),
     hranice: body && body.length >= 4 ? zjednodus(body, BODU_MAX) : null };
+}
+
+// Kolik lidí v okrese žije. Podle toho se počítá licence: okres je víc než
+// jedno město a nemá stát stejně.
+function pocetObyvatel(x) {
+  const e = (x && x.extratags) || {};
+  const n = parseInt(e.population || e['population:date'] || 0, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Doptání se na konkrétní objekt podle osm_id. Jméno není identita, tohle je.
+async function lookup(osmType, osmId) {
+  const p = String(osmType || '').toUpperCase().slice(0, 1);
+  if (!p || !osmId) return null;
+  const j = await fetchJson('https://nominatim.openstreetmap.org/lookup?format=jsonv2'
+    + '&polygon_geojson=1&extratags=1&osm_ids=' + p + encodeURIComponent(osmId), 20000);
+  return Array.isArray(j) && j.length ? j[0] : null;
 }
 
 // Hranice okresu. Hledá se jménem — reverse umí vrátit jméno, ale ne obrys.
 async function najdiHranici(nazev, zeme) {
   const q = encodeURIComponent(nazev + (zeme ? ', ' + zeme : ''));
   const j = await fetchJson('https://nominatim.openstreetmap.org/search?format=jsonv2'
-    + '&polygon_geojson=1&limit=1&q=' + q, 20000);
+    + '&polygon_geojson=1&extratags=1&limit=1&q=' + q, 20000);
   const x = Array.isArray(j) && j.length ? j[0] : null;
   if (!x) return null;
   const body = prstenec(x.geojson);
   return {
-    lat: Number(x.lat), lon: Number(x.lon),
+    lat: Number(x.lat), lon: Number(x.lon), obyvatel: pocetObyvatel(x),
     hranice: body && body.length >= 4 ? zjednodus(body, BODU_MAX) : null,
   };
 }
@@ -143,12 +171,26 @@ async function zajisti(key, nazev, zeme, hotovy) {
   if (!key) return null;
   const mam = await prisma.gameOkres.findUnique({ where: { key } }).catch(() => null);
   if (mam && mam.hranice) return mam;
-  const h = (hotovy && hotovy.hranice)
-    ? hotovy
-    : await najdiHranici(nazev || (mam && mam.nazev) || key, zeme || (mam && mam.zeme) || null);
+  let h = (hotovy && hotovy.hranice) ? hotovy : null;
+  // Obrys se dohledává přes některé město okresu — reverse z jeho středu
+  // vrátí TEN okres i s geometrií. Hledání podle jména je až poslední
+  // záchrana: jméno není identita a „okres Šumperk" trefilo město Šumperk.
+  if (!h) {
+    const mesto = await prisma.gameArea.findFirst({ where: { okres_key: key },
+      select: { lat: true, lon: true } }).catch(() => null);
+    if (mesto && mesto.lat != null) h = await najdiOkres(mesto.lat, mesto.lon).catch(() => null);
+    if (h && h.key !== key) h = null;
+  }
+  if (!h || !h.hranice) {
+    const z = await najdiHranici(nazev || (mam && mam.nazev) || key, zeme || (mam && mam.zeme) || null);
+    if (z && z.hranice) h = Object.assign({}, h || {}, z);
+  }
   const data = { nazev: String(nazev || (mam && mam.nazev) || key).slice(0, 120),
-    zeme: (zeme || (mam && mam.zeme) || null), lat: h ? h.lat : (mam && mam.lat),
-    lon: h ? h.lon : (mam && mam.lon), hranice: h ? h.hranice : ((mam && mam.hranice) || null) };
+    zeme: (zeme || (mam && mam.zeme) || null), lat: (h && h.lat) || (mam && mam.lat),
+    lon: (h && h.lon) || (mam && mam.lon),
+    obyvatel: (h && h.obyvatel) || (mam && mam.obyvatel) || null,
+    hranice: (h && h.hranice) || ((mam && mam.hranice) || null) };
+  if (!data.hranice) console.warn('[game] okres', key, '— hranice se nestáhla, mapa nakreslí kruh');
   return prisma.gameOkres.upsert({ where: { key }, create: Object.assign({ key }, data), update: data })
     .catch(() => mam);
 }
@@ -205,5 +247,6 @@ async function prevedStaraUzemi() {
   return kolik;
 }
 
-module.exports = { klic, zjednodus, prstenec, najdiOkres, najdiHranici,
-  proOblast, zajisti, oblasti, proKlice, prevedStaraUzemi, BODU_MAX };
+module.exports = { klic, zjednodus, prstenec, pocetObyvatel, lookup,
+  najdiOkres, najdiHranici, proOblast, zajisti, oblasti, proKlice,
+  prevedStaraUzemi, BODU_MAX };

@@ -8070,6 +8070,10 @@ function unieHtml(d) {
       + d.volne.map(function (v) {
         return '<div class="card"><div class="row"><h3>' + esc(v.nazev || v.okres_key) + '</h3><b>' + kcFull(v.licence) + '</b></div>'
           + '<div class="kv"><span>' + esc(tx('hra.unie_volnych_mist')) + '</span><b>' + cislo1(v.volnych) + ' / ' + cislo1(v.mist) + '</b></div>'
+          + (v.obyvatel ? '<div class="kv"><span>' + esc(tx('unie.obyvatel')) + '</span><b>'
+              + cislo1(v.obyvatel) + '</b></div>' : '')
+          + (v.mest > 1 ? '<div class="kv"><span>' + esc(tx('unie.mest_v_okrese')) + '</span><b>'
+              + cislo1(v.mest) + '</b></div>' : '')
           + '<div class="kv"><span>' + esc(tx('hra.unie_prumerne_skore')) + '</span><b>' + v.skore + '</b></div>'
           + '<div class="kv"><span>' + esc(tx('hra.unie_zavazek')) + '</span><b>' + cislo1(v.zavazek) + '</b></div>'
           + '<p class="fine">' + esc(tx('hra.unie_prevzeti_popis')) + '</p>'

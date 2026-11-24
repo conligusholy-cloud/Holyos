@@ -105,9 +105,27 @@ ok('polygon se kreslí jen z pořádného obrysu', /u\.hranice\.length >= 4/.tes
 // vracelo u „okres Šumperk" město Šumperk a na mapě svítila obec místo okresu.
 ok('okres si nese obrys z reverse',
   /polygon_geojson=1&lat=/.test(Z) && /hranice: body && body\.length >= 4/.test(Z));
-ok('a hledání podle jména je až záloha',
-  /const h = \(hotovy && hotovy\.hranice\)\s*\?\s*hotovy\s*:\s*await najdiHranici/.test(Z));
+ok('a hledání podle jména je až poslední záchrana',
+  /if \(!h \|\| !h\.hranice\) \{\s*const z = await najdiHranici/.test(Z));
 ok('nalezený okres se rovnou uloží i s hranicí', /zajisti\(o\.key, o\.nazev, o\.zeme, o\)/.test(Z));
+
+// Okres je víc než jedno město a nemá stát stejně. Volná místa znají jen tu
+// část okresu, kterou někdo prozkoumal — počet obyvatel platí i pro zbytek.
+const U2 = cti('services/game/unie.js');
+ok('licence počítá i z obyvatel okresu',
+  /licence_za_obyvatele/.test(U2) && /Math\.round\(obyvatel \* \(nast\.licence_za_obyvatele/.test(U2));
+ok('a bere to vyšší z obou měřítek, ne součet',
+  /const cena = Math\.max\(nast\.licence_min,[\s\S]{0,200}licence_za_obyvatele/.test(U2));
+ok('počet obyvatel se u okresu drží', /obyvatel   Int\?/.test(cti('prisma/schema.prisma')));
+ok('a tahá se z OSM', /function pocetObyvatel\(x\)/.test(Z) && /extratags=1/.test(Z));
+// Jméno není identita: doptat se musí podle osm_id toho objektu, který
+// reverse vrátil, ne podle textu „okres Šumperk".
+ok('obrys se doptává podle osm_id', /function lookup\(osmType, osmId\)/.test(Z)
+  && /osm_ids=' \+ p \+ encodeURIComponent\(osmId\)/.test(Z)
+  && /if \(\(!body \|\| body\.length < 4\) && j\.osm_type && j\.osm_id\) \{[\s\S]{0,200}await lookup\(j\.osm_type, j\.osm_id\)/.test(Z));
+ok('a chybějící obrys se dohledá přes město okresu',
+  /najdiOkres\(mesto\.lat, mesto\.lon\)/.test(Z) && /if \(h && h\.key !== key\) h = null;/.test(Z));
+ok('když ani to nevyjde, je to vidět v logu', /hranice se nestáhla/.test(Z));
 
 const schema = cti('prisma/schema.prisma');
 ok('schéma zná okresy', /model GameOkres \{/.test(schema));

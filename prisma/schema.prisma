@@ -8011,6 +8011,9 @@ model GameOkres {
   zeme       String?  @db.VarChar(2)
   lat        Float?
   lon        Float?
+  // Kolik lidí v okrese žije. Podle toho se počítá licence — okres je víc
+  // než jedno město a nemá stát stejně.
+  obyvatel   Int?
   // Zjednodušený obrys [[lat,lon], …]. Celá hranice z OSM má tisíce bodů,
   // na mapě v telefonu je k ničemu a jen by se vlekla po drátě.
   hranice    Json?

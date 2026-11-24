@@ -44,6 +44,9 @@ const VYCHOZI = {
   odvod_pct: 30,             // kolik % servisu opustí výrobu a jde hráčům
   operator_pct: 60,          // z odvodu operátorovi, zbytek masterovi
   licence_za_misto: 1200,    // licence za herní měsíc = volná místa × tohle × skóre/100
+  // Okres je víc než jedno město a nemá stát stejně. Volná místa znají jen tu
+  // část okresu, kterou někdo prozkoumal — počet obyvatel platí i pro zbytek.
+  licence_za_obyvatele: 1,
   licence_min: 20000,
   zavazek_pct: 10,           // rozvojový závazek: % volných míst za herní rok
   vyzva_prah: 40,            // nespokojenost, od které smí vyzvat kdokoli
@@ -114,13 +117,18 @@ async function potencial(okresKey) {
   const skore = volna.length
     ? volna.reduce((a, sp) => a + (Number(sp.score) || 0), 0) / volna.length
     : 0;
+  // Licence je to vyšší z obou měřítek, ne jejich součet: obě měří totéž
+  // (jak je území velké), jen jedno z prozkoumané části a druhé z celku.
+  const obyvatel = Math.max(0, Math.round((okres && okres.obyvatel) || 0));
   const cena = Math.max(nast.licence_min,
-    Math.round(volna.length * nast.licence_za_misto * (skore / 100)));
+    Math.round(volna.length * nast.licence_za_misto * (skore / 100)),
+    Math.round(obyvatel * (nast.licence_za_obyvatele || 0)));
   return {
     okres_key: key,
     nazev: (okres && okres.nazev) || (mesta[0] && mesta[0].name) || key,
     zeme: (okres && okres.zeme) || (mesta[0] && mesta[0].country) || null,
     mest: mesta.length,
+    obyvatel: obyvatel || null,
     mist: spots.length,
     volnych: volna.length,
     stroju: zabory.filter((z) => z.model).length,
