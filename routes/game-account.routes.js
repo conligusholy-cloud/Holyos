@@ -1894,6 +1894,10 @@ router.get('/cards', async (req, res, next) => {
       subs: await subsPublic(prev), predplatne: await predplatneHrace(p),
       payments: require('./game-stripe.routes')._paymentsOn(),
       owned: p ? (await pub(p)).cards : null,
+      // Povolení do uzavřeného testu Unie. Jde ven i tady, protože /account/me
+      // se tahá jen při načtení hry: kdo se do testu přidá za běhu, čekal na
+      // příznak do příštího otevření hry a vypadalo to, že se nic nestalo.
+      unie: p ? await unieSmi(p.id).catch(() => false) : false,
       rush_zdarma_za: p ? rushZdarmaZa(p) : null,
       rush_zdarma_max: RUSH_ZDARMA_MAX,
     });

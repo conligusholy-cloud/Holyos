@@ -498,6 +498,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
+# Kdy se hráči ukáže záložka Unie. Povolení se přidává za běhu, ale hra si
+# ho brala jen při načtení — přidaný hráč pak neviděl nic.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|public/compounder/game/index.html|routes/game-account|services/game/unie'; then
+  if ! node nastroje/tunieviditelna.js; then
+    echo ""
+    echo "STOP: záložka Unie se neukazuje, jak má (viz výš)."
+    exit 1
+  fi
+fi
+
 # Odkup podílu zpátky od fondu. Fond nesmí prodat víc, než drží, a platit se
 # má to, na čem se strany dohodly — jsou to cizí peníze a cizí kus firmy.
 if git diff --cached --name-only | grep -qE 'services/game/fond|routes/game-trade|public/compounder/game/game.js'; then

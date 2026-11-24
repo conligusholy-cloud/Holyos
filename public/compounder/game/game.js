@@ -16008,6 +16008,15 @@ function loadCards() {
     FB = r.j.facebook || null;
     RUSH_ZA = r.j.rush_zdarma_za; RUSH_MAX = r.j.rush_zdarma_max || 5;
     if (r.j.owned && ME) ME.cards = r.j.owned;
+    // Povolení do uzavřeného testu Unie. /account/me se tahá jen při načtení
+    // hry, takže kdo se do testu přidá za běhu, čekal na záložku do příštího
+    // otevření hry — a vypadalo to, že se nic nestalo. Tohle běží každou
+    // minutu, takže se změna projeví do minuty, jak slibuje administrace.
+    if (typeof r.j.unie === 'boolean' && ME && ME.unie !== r.j.unie) {
+      ME.unie = r.j.unie;
+      unieTab();
+      if (ME.unie) toast(esc(tx('hra.unie_otevrena')), 'ok', true);
+    }
   }).catch(function () { });
 }
 function ownedOf(kind) { return (ME && ME.cards && ME.cards[kind]) || 0; }
