@@ -1,0 +1,11 @@
+-- Zahodit obrysy a sousedy stažené z Nominatimu.
+--
+-- Hranice se nově tahá z Overpassu, který se umí zeptat přímo na to, co
+-- chceme: která administrativní hranice ten bod obsahuje. Nominatim je
+-- geokodér — jméno umí, obrys z něj chodil nespolehlivě a hledání podle
+-- jména trefilo město místo okresu.
+--
+-- Co už je uložené, by se znovu nestáhlo (zajisti() na vyplněné hranici
+-- končí), takže se to vyprázdní a doplní se samo při prvním pohledu na mapu.
+-- Sousedi jdou pryč taky: hledali se přes obrys, který byl špatný.
+UPDATE "game_okresy" SET "hranice" = NULL, "sousedi" = NULL;

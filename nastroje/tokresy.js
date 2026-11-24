@@ -124,8 +124,37 @@ ok('obrys se doptává podle osm_id', /function lookup\(osmType, osmId\)/.test(Z
   && /osm_ids=' \+ p \+ encodeURIComponent\(osmId\)/.test(Z)
   && /if \(\(!body \|\| body\.length < 4\) && j\.osm_type && j\.osm_id\) \{[\s\S]{0,200}await lookup\(j\.osm_type, j\.osm_id\)/.test(Z));
 ok('a chybějící obrys se dohledá přes město okresu',
-  /najdiOkres\(mesto\.lat, mesto\.lon\)/.test(Z) && /if \(h && h\.key !== key\) h = null;/.test(Z));
+  /najdiOkres\(mesto\.lat, mesto\.lon, mesto\.country\)/.test(Z));
+// Overpass se ptá rovnou na hranici, která ten bod obsahuje. Nominatim je
+// geokodér: umí jméno, ale obrys z něj chodí nespolehlivě — a jméno není
+// identita, hledání „okres Šumperk" trefilo město Šumperk.
+ok('hranice se tahá z Overpassu', /function okresOverpass\(lat, lon, zemeHint\)/.test(Z)
+  && /is_in\(' \+ Number\(lat\)/.test(Z));
+ok('a Nominatim je až záloha',
+  /const op = await okresOverpass\(lat, lon, zemeHint\)[\s\S]{0,120}if \(op && op\.key && op\.hranice\) return op;/.test(Z));
+ok('bere se nižší správní úroveň', /rely\.sort\(\(a, b\) => Number\(a\.tags\.admin_level/.test(Z));
+ok('a jen vnější okraj relace', /!m\.role \|\| m\.role === 'outer'/.test(Z));
+ok('kusy relace se sešívají', /const obrys = sesij\(casti\);/.test(Z));
 ok('když ani to nevyjde, je to vidět v logu', /hranice se nestáhla/.test(Z));
+
+// Hranice chodí z Overpassu po kouscích a v náhodném pořadí. Bez sešití by
+// z obrysu byla hvězdice — čáry by skákaly křížem krážem.
+const ses = Z.match(/function sesij\(casti\) \{[\s\S]*?\n\}/);
+ok('v okresy.js se našlo: sesij', !!ses);
+if (ses) {
+  const b2 = { Math: Math };
+  vm.createContext(b2);
+  vm.runInContext(ses[0], b2);
+  const h = [[0, 0], [0, 1]], p = [[1, 1], [0, 1]], d = [[1, 1], [1, 0]], l = [[1, 0], [0, 0]];
+  const kruh2 = b2.sesij([p, l, h, d]);
+  ok('kusy se sešijí do kruhu', kruh2.length === 5, '— ' + kruh2.length + ' bodů');
+  ok('a konec navazuje na začátek',
+    kruh2[0][0] === kruh2[kruh2.length - 1][0] && kruh2[0][1] === kruh2[kruh2.length - 1][1],
+    '— ' + JSON.stringify([kruh2[0], kruh2[kruh2.length - 1]]));
+  ok('obrácený kus se otočí', b2.sesij([h, p]).length === 3);
+  ok('kus, co nenavazuje, se nepřilepí', b2.sesij([h, [[9, 9], [9, 8]]]).length === 2);
+  ok('prázdno nic neshodí', b2.sesij([]).length === 0);
+}
 
 const schema = cti('prisma/schema.prisma');
 ok('schéma zná okresy', /model GameOkres \{/.test(schema));
