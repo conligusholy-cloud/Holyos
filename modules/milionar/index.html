@@ -660,7 +660,7 @@
         var uz = (j.uzemi || []).length
           ? '<div class="tbl-wrap" style="margin-top:10px"><table class="data-table"><thead><tr><th>Území</th><th>Master</th><th class="num">Poplatek</th><th class="num">Nespokojenost</th><th class="num">Licence</th><th>Výzva</th></tr></thead><tbody>'
             + j.uzemi.map(function (u) {
-              return '<tr><td><b>' + esc(u.area_key) + '</b></td><td>' + esc(u.master_nick) + '</td>'
+              return '<tr><td><b>' + esc(u.okres_key || u.area_key) + '</b></td><td>' + esc(u.master_nick) + '</td>'
                 + '<td class="num">' + u.poplatek_pct + ' %</td>'
                 + '<td class="num" style="color:' + (u.nespokojenost >= (n.vyzva_prah || 40) ? '#f87171' : '#22c55e') + '">' + u.nespokojenost + '</td>'
                 + '<td class="num">' + cz(u.licence) + '</td><td>' + (u.vyzyvatel_nick ? esc(u.vyzyvatel_nick) : '—') + '</td></tr>';

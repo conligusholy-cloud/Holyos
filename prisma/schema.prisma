@@ -7989,12 +7989,35 @@ model GameArea {
   lat        Float?
   lon        Float?
   population Int?
+  // Do kterého okresu město patří. Vyplní se při prvním dotazu (reverse
+  // geokódování středu) a pak se už jen čte — území Unie se váže na okres.
+  okres_key   String?  @db.VarChar(80)
+  okres_nazev String?  @db.VarChar(120)
   spots      Json
   hits       Int      @default(0)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   @@map("game_areas")
+}
+
+// Okres: území Unie a jeho skutečná hranice. Hranice se jednou stáhne
+// z OpenStreetMap a drží se tu — mapa pak nečeká na cizí službu a Nominatim
+// nedostává pořád stejný dotaz.
+model GameOkres {
+  id         Int      @id @default(autoincrement())
+  key        String   @unique @db.VarChar(80)
+  nazev      String   @db.VarChar(120)
+  zeme       String?  @db.VarChar(2)
+  lat        Float?
+  lon        Float?
+  // Zjednodušený obrys [[lat,lon], …]. Celá hranice z OSM má tisíce bodů,
+  // na mapě v telefonu je k ničemu a jen by se vlekla po drátě.
+  hranice    Json?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("game_okresy")
 }
 
 // Obsazené místo ve hře. Na jednom místě stojí nejvýš jeden prádlomat — ať už
@@ -8084,7 +8107,12 @@ model GameSpotClaim {
 // Území pod jedním masterem. Jedna oblast = nejvýš jeden master.
 model GameTerritory {
   id         Int      @id @default(autoincrement())
-  area_key   String   @unique @db.VarChar(80)
+  // Území je OKRES, ne město. Dokud se vázalo na město, kreslil se na mapě
+  // kruh kolem středu — kresba bez podkladu, kde se dvě města v jednom okrese
+  // překrývala a nebylo poznat, kde území končí. Sloupec zůstal pojmenovaný
+  // area_key, ať se nemusí stěhovat data; co je klíč okresu, řeší
+  // services/game/okresy.js.
+  okres_key  String   @unique @map("area_key") @db.VarChar(80)
   master_id  Int
   master_nick String  @db.VarChar(24)
 
@@ -8133,7 +8161,8 @@ model GameTerritory {
 // Operátorská licence: právo servisovat v jednom území. Prodává ji master.
 model GameOperatorLicence {
   id         Int      @id @default(autoincrement())
-  area_key   String   @db.VarChar(80)
+  // Klíč okresu, viz GameTerritory.
+  okres_key  String   @map("area_key") @db.VarChar(80)
   player_id  Int
   nick       String   @db.VarChar(24)
   // Co operátor masterovi zaplatil a jaký podíl ze servisu mu za to patří (%).
@@ -8145,7 +8174,7 @@ model GameOperatorLicence {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  @@unique([area_key, player_id])
+  @@unique([okres_key, player_id])
   @@index([player_id])
   @@map("game_operator_licences")
 }

@@ -2102,9 +2102,9 @@ const UNIE = require('../services/game/unie');
 router.get('/unie-nastaveni', api(async (req, res) => {
   const nast = await UNIE.nastaveni();
   const uzemi = await prisma.gameTerritory.findMany({
-    select: { area_key: true, master_nick: true, poplatek_pct: true, nespokojenost: true,
+    select: { okres_key: true, master_nick: true, poplatek_pct: true, nespokojenost: true,
       licence: true, vyzyvatel_nick: true },
-    orderBy: { area_key: 'asc' }, take: 200,
+    orderBy: { okres_key: 'asc' }, take: 200,
   }).catch(() => []);
   res.json({ ok: true, nastaveni: nast, vychozi: UNIE.VYCHOZI, uzemi });
 }));

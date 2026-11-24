@@ -498,6 +498,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
+# Území Unie je okres, ne město. Zábor nese město, takže se mezi tím musí
+# překládat — bez toho území nenajde ani jeden stroj a tiše vychází nula.
+if git diff --cached --name-only | grep -qE 'services/game/okresy|services/game/unie|routes/game-unie|public/compounder/game/game.js|prisma/schema.prisma'; then
+  if ! node nastroje/tokresy.js; then
+    echo ""
+    echo "STOP: okresy jako území nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Market place: výloha podle měst a prodej připraveného místa. U provozovny
 # se převádí stroj, u místa jen zábor — když se to splete, přijde kupující
 # o stroj, nebo dostane ten, co nikdo neprodal.

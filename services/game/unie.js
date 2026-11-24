@@ -8,9 +8,11 @@
 //   operátor       shání a připravuje místa, servisuje v území (od 10 strojů)
 //   master partner drží území, nabírá operátory, určuje poplatek (od 60)
 //
-// Území = oblast (area_key), ne země. V Česku hraje většina hráčů; kdo by
-// získal celou zemi, vyhrál by hru a ostatním by nezbylo o co hrát. Oblast
-// navíc sedí na datový model — zábory už area_key nesou.
+// Území = OKRES, ne země a ne město. Zemi by jeden hráč získal celou a ostatním
+// by nezbylo o co hrát; město je zase tak malé, že se v něm nepotkají dva lidi.
+// Okres je navíc hranice, která někde doopravdy je — dá se nakreslit na mapu
+// a vedle ní si vzít další. Zábory nesou město, takže okres se na ně překládá
+// přes services/game/okresy.js.
 //
 // Peníze: každý prádlomat dnes platí měsíční servis (13 % tržby) a ten mizí
 // do prázdna. Nově z něj část opouští „výrobu" a rozdělí se mezi operátora
@@ -26,6 +28,7 @@
 const { prisma } = require('../../config/database');
 const { getSetting, setSetting } = require('../settings');
 const EKO = require('./ekonomika');
+const OKRESY = require('./okresy');
 
 const KEY = 'game.unie';
 const MESIC_MS = 43200000;          // herní měsíc = 12 skutečných hodin
@@ -91,14 +94,21 @@ async function role(playerId) {
 // ─── Potenciál oblasti ───────────────────────────────────────────────────────
 // Z čeho se počítá cena licence: kolik je v oblasti volných míst a jak jsou
 // dobrá. Prázdná oblast stojí minimum, Praha plná stovek míst znatelně víc.
-async function potencial(areaKey) {
-  const key = String(areaKey || '');
-  const [area, zabory, nast] = await Promise.all([
-    prisma.gameArea.findUnique({ where: { key }, select: { key: true, name: true, country: true, spots: true } }).catch(() => null),
-    prisma.gameSpotClaim.findMany({ where: { area_key: key }, select: { spot_id: true, model: true, player_id: true } }),
+async function potencial(okresKey) {
+  const key = String(okresKey || '');
+  const [mesta, okres, nast] = await Promise.all([
+    prisma.gameArea.findMany({ where: { okres_key: key },
+      select: { key: true, name: true, country: true, spots: true } }).catch(() => []),
+    prisma.gameOkres.findUnique({ where: { key } }).catch(() => null),
     nastaveni(),
   ]);
-  const spots = Array.isArray(area && area.spots) ? area.spots : [];
+  const klice = mesta.map((m) => m.key);
+  const zabory = klice.length
+    ? await prisma.gameSpotClaim.findMany({ where: { area_key: { in: klice } },
+      select: { spot_id: true, model: true, player_id: true } })
+    : [];
+  // Místa celého okresu dohromady — hráč si bere okres, ne jedno město.
+  const spots = mesta.reduce((a, m) => a.concat(Array.isArray(m.spots) ? m.spots : []), []);
   const zabrano = new Set(zabory.map((z) => z.spot_id));
   const volna = spots.filter((sp) => sp && !zabrano.has(sp.id));
   const skore = volna.length
@@ -107,9 +117,10 @@ async function potencial(areaKey) {
   const cena = Math.max(nast.licence_min,
     Math.round(volna.length * nast.licence_za_misto * (skore / 100)));
   return {
-    area_key: key,
-    nazev: (area && area.name) || key,
-    zeme: (area && area.country) || null,
+    okres_key: key,
+    nazev: (okres && okres.nazev) || (mesta[0] && mesta[0].name) || key,
+    zeme: (okres && okres.zeme) || (mesta[0] && mesta[0].country) || null,
+    mest: mesta.length,
     mist: spots.length,
     volnych: volna.length,
     stroju: zabory.filter((z) => z.model).length,
@@ -193,12 +204,13 @@ async function vyuctujUzemi(t, nastIn) {
   const od = new Date(t.servis_do || t.created_at).getTime();
   const mesicu = Math.floor((Date.now() - od) / MESIC_MS);
   if (mesicu < 1) return { mesicu: 0, master: 0, operator: 0 };
+  const klice = await OKRESY.oblasti(t.okres_key);
   const [mista, licence] = await Promise.all([
-    prisma.gameSpotClaim.findMany({
-      where: { area_key: t.area_key, model: { not: '' } },
+    klice.length ? prisma.gameSpotClaim.findMany({
+      where: { area_key: { in: klice }, model: { not: '' } },
       select: { spot_id: true, player_id: true, nick: true, name: true, model: true, score: true, rent: true, pozemek: true },
-    }),
-    prisma.gameOperatorLicence.findMany({ where: { area_key: t.area_key, zrusena: false } }),
+    }) : [],
+    prisma.gameOperatorLicence.findMany({ where: { okres_key: t.okres_key, zrusena: false } }),
   ]);
   const operator = licence.find((l) => !l.do_kdy || new Date(l.do_kdy).getTime() > Date.now()) || null;
   const operatorPct = operator ? Math.max(0, Math.min(100, operator.podil_pct)) : 0;
@@ -216,7 +228,7 @@ async function vyuctujUzemi(t, nastIn) {
     }
   });
 
-  const klic = 'unie:' + t.area_key + ':' + Math.round(od / MESIC_MS);
+  const klic = 'unie:' + t.okres_key + ':' + Math.round(od / MESIC_MS);
   const nove = new Date(od + mesicu * MESIC_MS);
   await prisma.$transaction(async (tx) => {
     // Podmíněný posun: když mezitím vyúčtoval někdo jiný, neudělá se nic.
@@ -228,22 +240,22 @@ async function vyuctujUzemi(t, nastIn) {
     if (proMastera > 0) {
       await tx.gameDelivery.create({ data: {
         player_id: t.master_id, kind: 'cash', amount: proMastera, spot_id: klic + ':m',
-        text_kod: 'dor.unie_master', text_data: { penize: proMastera, p1: t.area_key, p2: String(mista.length) },
-        popis: 'Servisní poplatky z území ' + t.area_key + ' — ' + proMastera.toLocaleString('cs-CZ') + ' L$',
+        text_kod: 'dor.unie_master', text_data: { penize: proMastera, p1: t.okres_key, p2: String(mista.length) },
+        popis: 'Servisní poplatky z území ' + t.okres_key + ' — ' + proMastera.toLocaleString('cs-CZ') + ' L$',
       } });
     }
     if (operator && proOperatora > 0) {
       await tx.gameDelivery.create({ data: {
         player_id: operator.player_id, kind: 'cash', amount: proOperatora, spot_id: klic + ':o',
-        text_kod: 'dor.unie_operator', text_data: { penize: proOperatora, p1: t.area_key, p2: String(mista.length) },
-        popis: 'Servis v území ' + t.area_key + ' — ' + proOperatora.toLocaleString('cs-CZ') + ' L$',
+        text_kod: 'dor.unie_operator', text_data: { penize: proOperatora, p1: t.okres_key, p2: String(mista.length) },
+        popis: 'Servis v území ' + t.okres_key + ' — ' + proOperatora.toLocaleString('cs-CZ') + ' L$',
       } });
     }
     for (const [pid, v] of priplatky) {
       await tx.gameDelivery.create({ data: {
         player_id: pid, kind: 'cash', amount: -v.castka, spot_id: klic + ':p' + pid,
-        text_kod: 'dor.unie_priplatek', text_data: { penize: v.castka, p1: t.area_key, p2: t.master_nick },
-        popis: 'Zvýšený servisní poplatek v území ' + t.area_key + ' (' + t.master_nick + ') — '
+        text_kod: 'dor.unie_priplatek', text_data: { penize: v.castka, p1: t.okres_key, p2: t.master_nick },
+        popis: 'Zvýšený servisní poplatek v území ' + t.okres_key + ' (' + t.master_nick + ') — '
           + v.castka.toLocaleString('cs-CZ') + ' L$',
       } });
     }
@@ -262,26 +274,33 @@ async function vyhodnotVyzvu(t) {
       master_id: t.vyzyvatel_id, master_nick: t.vyzyvatel_nick || '',
       licence: Math.max(t.licence, t.vyzyvatel_cena || 0),
       licence_do: new Date(Date.now() + MESIC_MS),
-      zavazek_od: new Date(), zavazek_start: await prisma.gameSpotClaim.count({
-        where: { area_key: t.area_key, model: { not: '' } } }),
+      zavazek_od: new Date(), zavazek_start: await pocetVOkrese(t.okres_key),
       vyzyvatel_id: null, vyzyvatel_nick: null, vyzyvatel_cena: null, vyzva_do: null,
     },
   });
   await prisma.gameDelivery.createMany({ data: [
     { player_id: stary.id, kind: 'zprava', spot_id: 'unie:vyzva:' + t.id,
-      text_kod: 'dor.unie_uzemi_ztraceno', text_data: { p1: t.area_key, p2: upd.master_nick },
-      popis: 'Přišel jsi o území ' + t.area_key + ' — přeplatil tě ' + upd.master_nick },
+      text_kod: 'dor.unie_uzemi_ztraceno', text_data: { p1: t.okres_key, p2: upd.master_nick },
+      popis: 'Přišel jsi o území ' + t.okres_key + ' — přeplatil tě ' + upd.master_nick },
     { player_id: upd.master_id, kind: 'zprava', spot_id: 'unie:vyzva:' + t.id + ':v',
-      text_kod: 'dor.unie_uzemi_ziskano', text_data: { p1: t.area_key },
-      popis: 'Získal jsi území ' + t.area_key },
+      text_kod: 'dor.unie_uzemi_ziskano', text_data: { p1: t.okres_key },
+      popis: 'Získal jsi území ' + t.okres_key },
   ] }).catch(() => {});
-  console.log('[game] unie — území', t.area_key, 'přechází na', upd.master_nick);
+  console.log('[game] unie — území', t.okres_key, 'přechází na', upd.master_nick);
   return upd;
 }
 
 // Kolik prádlomatů v území přibylo od převzetí — proti tomu se měří závazek.
+// Kolik prádlomatů v okrese stojí. Zábory nesou město, proto se napřed
+// zjistí, která města do okresu patří.
+async function pocetVOkrese(okresKey) {
+  const klice = await OKRESY.oblasti(okresKey);
+  if (!klice.length) return 0;
+  return prisma.gameSpotClaim.count({ where: { area_key: { in: klice }, model: { not: '' } } });
+}
+
 async function pridanoOdPrevzeti(t) {
-  const ted = await prisma.gameSpotClaim.count({ where: { area_key: t.area_key, model: { not: '' } } });
+  const ted = await pocetVOkrese(t.okres_key);
   return Math.max(0, ted - (t.zavazek_start || 0));
 }
 
@@ -293,13 +312,16 @@ async function uzemiPub(t, meId, nast) {
   // Co území dělá: kolik v něm stojí cizích prádlomatů, co z nich masterovi
   // za herní měsíc plyne a jestli tu někdo servisuje. Bez těchhle tří čísel
   // drží hráč území a neví, proč ho drží.
-  const [vsechny, licence, area] = await Promise.all([
-    prisma.gameSpotClaim.findMany({
-      where: { area_key: t.area_key, model: { not: '' } },
+  const kliceO = await OKRESY.oblasti(t.okres_key);
+  const [vsechny, licence, okres, mesta] = await Promise.all([
+    kliceO.length ? prisma.gameSpotClaim.findMany({
+      where: { area_key: { in: kliceO }, model: { not: '' } },
       select: { player_id: true, model: true, score: true, rent: true, pozemek: true, nick: true },
-    }),
-    prisma.gameOperatorLicence.findFirst({ where: { area_key: t.area_key, zrusena: false } }),
-    prisma.gameArea.findUnique({ where: { key: t.area_key }, select: { name: true, spots: true } }).catch(() => null),
+    }) : [],
+    prisma.gameOperatorLicence.findFirst({ where: { okres_key: t.okres_key, zrusena: false } }),
+    prisma.gameOkres.findUnique({ where: { key: t.okres_key } }).catch(() => null),
+    kliceO.length ? prisma.gameArea.findMany({ where: { key: { in: kliceO } },
+      select: { name: true, spots: true } }).catch(() => []) : [],
   ]);
   const operatorPct = licence ? Math.max(0, Math.min(100, licence.podil_pct)) : 0;
   let proMastera = 0, proOperatora = 0, odvedou = 0;
@@ -307,9 +329,10 @@ async function uzemiPub(t, meId, nast) {
     const r = odvodZMista(c, t, operatorPct, n.odvod_pct);
     proMastera += r.master; proOperatora += r.operator; odvedou += r.odvod;
   });
-  const spots = Array.isArray(area && area.spots) ? area.spots : [];
+  const spots = mesta.reduce((a, m) => a.concat(Array.isArray(m.spots) ? m.spots : []), []);
   return {
-    nazev: (area && area.name) || t.area_key,
+    nazev: (okres && okres.nazev) || t.okres_key,
+    mest: mesta.length,
     stroju: vsechny.length,
     cizich: vsechny.filter((c) => Number(c.player_id) !== Number(t.master_id)).length,
     mist: spots.length,
@@ -319,7 +342,7 @@ async function uzemiPub(t, meId, nast) {
     operator_nick: licence ? licence.nick : null,
     operator_podil: licence ? licence.podil_pct : null,
     operator_cena: t.operator_cena || null,
-    area_key: t.area_key,
+    okres_key: t.okres_key,
     master_id: t.master_id,
     master_nick: t.master_nick,
     moje: Number(meId) === t.master_id,
@@ -348,18 +371,26 @@ async function uzemiPub(t, meId, nast) {
 async function zebricekUzemi() {
   const [uzemi, nast] = await Promise.all([prisma.gameTerritory.findMany(), nastaveni()]);
   if (!uzemi.length) return [];
-  const klice = uzemi.map((t) => t.area_key);
+  const klice = uzemi.map((t) => t.okres_key);
+  // Zábor nese město, území okres — mezi tím musí stát překlad, jinak by se
+  // hledaly zábory podle klíče okresu a žebříček by byl samá nula.
+  const mesta = await prisma.gameArea.findMany({ where: { okres_key: { in: klice } },
+    select: { key: true, okres_key: true } }).catch(() => []);
+  const okresMesta = new Map(mesta.map((m) => [m.key, m.okres_key]));
   const [mista, licence] = await Promise.all([
-    prisma.gameSpotClaim.findMany({
-      where: { area_key: { in: klice }, model: { not: '' } },
+    mesta.length ? prisma.gameSpotClaim.findMany({
+      where: { area_key: { in: mesta.map((m) => m.key) }, model: { not: '' } },
       select: { area_key: true, player_id: true, model: true, score: true, rent: true, pozemek: true },
-    }),
-    prisma.gameOperatorLicence.findMany({ where: { area_key: { in: klice }, zrusena: false } }),
+    }) : [],
+    prisma.gameOperatorLicence.findMany({ where: { okres_key: { in: klice }, zrusena: false } }),
   ]);
-  const operatorVOblasti = {};
-  licence.forEach((l) => { if (!operatorVOblasti[l.area_key]) operatorVOblasti[l.area_key] = l; });
-  const podleOblasti = {};
-  mista.forEach((c) => { (podleOblasti[c.area_key] = podleOblasti[c.area_key] || []).push(c); });
+  const operatorVOkrese = {};
+  licence.forEach((l) => { if (!operatorVOkrese[l.okres_key]) operatorVOkrese[l.okres_key] = l; });
+  const podleOkresu = {};
+  mista.forEach((c) => {
+    const o = okresMesta.get(c.area_key);
+    if (o) (podleOkresu[o] = podleOkresu[o] || []).push(c);
+  });
 
   const masteri = {};
   const operatori = {};
@@ -367,9 +398,9 @@ async function zebricekUzemi() {
     const m = masteri[t.master_id] = masteri[t.master_id]
       || { id: t.master_id, nick: t.master_nick, uzemi: 0, stroju: 0, prijem: 0 };
     m.uzemi++;
-    const lic = operatorVOblasti[t.area_key] || null;
+    const lic = operatorVOkrese[t.okres_key] || null;
     const opPct = lic ? Math.max(0, Math.min(100, lic.podil_pct)) : 0;
-    (podleOblasti[t.area_key] || []).forEach((c) => {
+    (podleOkresu[t.okres_key] || []).forEach((c) => {
       const r = odvodZMista(c, t, opPct, nast.odvod_pct);
       m.stroju++; m.prijem += r.master;
       if (lic) {
@@ -387,6 +418,6 @@ async function zebricekUzemi() {
 module.exports = {
   KEY, MESIC_MS, ROK_MS, VYCHOZI,
   nastaveni, ulozNastaveni, role, pocetStroju, potencial,
-  nespokojenostZ, duvodVyzvy, servisMista, rozpad, odvodZMista,
+  nespokojenostZ, duvodVyzvy, servisMista, rozpad, odvodZMista, pocetVOkrese,
   vyuctujUzemi, vyhodnotVyzvu, pridanoOdPrevzeti, uzemiPub, zebricekUzemi,
 };

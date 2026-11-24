@@ -68,7 +68,7 @@ ok('bez operátora bere master všechno', bezOp.master === bezOp.odvod && bezOp.
 const Z = cti('services/game/unie.js');
 ok('vyúčtování počítá přes odvodZMista', /mista\.forEach\(\(c\) => \{\s*const r = odvodZMista\(/.test(Z));
 ok('přehled území taky', /vsechny\.forEach\(\(c\) => \{\s*const r = odvodZMista\(/.test(Z));
-ok('žebříček taky', /podleOblasti\[t\.area_key\] \|\| \[\]\)\.forEach\(\(c\) => \{\s*const r = odvodZMista\(/.test(Z));
+ok('žebříček taky', /podleOkresu\[t\.okres_key\] \|\| \[\]\)\.forEach\(\(c\) => \{\s*const r = odvodZMista\(/.test(Z));
 ok('a nikde se už masterova síť nevynechává',
   !/player_id: \{ not: t\.master_id \}/.test(Z) && !/c\.player_id === t\.master_id\) return;/.test(Z));
 
