@@ -57,11 +57,12 @@ sledovanePole.filter = function (f) { scanu++; return Array.prototype.filter.cal
 sledovanePole.forEach = function (f) { pruchodu++; return Array.prototype.forEach.call(this, f); };
 sledovanePole.some = function (f) { scanu++; return Array.prototype.some.call(this, f); };
 
-let ikon = 0, markeru = 0;
+let ikon = 0, markeru = 0, kruhu = 0;
+const kruh = () => { kruhu++; return { addTo: () => ({ bindTooltip: () => ({ on: () => {} }) }) }; };
 const ctx = {
   layer: { clearLayers: () => {} },
   map: { getZoom: () => 9, latLngToContainerPoint: (ll) => ({ x: ll[1] * 100, y: ll[0] * 100 }) },
-  L: { marker: () => { markeru++; return { addTo: () => ({ on: () => {} }) }; } },
+  L: { marker: () => { markeru++; return { addTo: () => ({ on: () => {} }) }; }, circle: kruh },
   S: { areas: areas, units: sledovanePole, revealed: {}, pozemky: [], pobocky: [], sidlo: null,
     startedAt: Date.now() },
   CLAIMS: {},
@@ -83,11 +84,16 @@ const ctx = {
   unitSheet: () => {}, zakladnaSheet: () => {},
   paintServis: () => {}, paintTrhBadge: () => {},
   esc: (x) => String(x), tx: () => '', $: () => ({ textContent: '', classList: { add: () => {}, remove: () => {} } }),
+  // Vrstva území (Unie). Výchozí stav je vypnutá — tak ji má drtivá většina
+  // hráčů a právě ten průchod se měří.
+  UZEMI_VRSTVA: false, UZEMI_MAPA: null, UZEMI_R: 7000,
+  uzemiNaMapeSheet: () => {}, sheet: () => {},
   Object, Math, String, Date, console,
 };
+ctx.window = ctx;
 vm.createContext(ctx);
 vm.runInContext(telo(zdroj, 'shlukuj') + '\n' + telo(zdroj, 'vykresliShluky') + '\n'
-  + telo(zdroj, 'drawMap'), ctx);
+  + telo(zdroj, 'kresliUzemi') + '\n' + telo(zdroj, 'drawMap'), ctx);
 
 console.log('\nPřekreslení mapy u sítě o ' + (MEST * MIST) + ' místech a ' + STROJU + ' strojích');
 const start = Date.now();
@@ -103,6 +109,25 @@ ma(ikon <= markeru, 'ikona se staví jen pro to, co se opravdu kreslí',
 // že se staví i pro schované.
 ma(ikon < MEST * MIST / 2, 'schované špendlíky ikonu nedostanou', ikon + ' < ' + (MEST * MIST / 2));
 console.log('  (překreslení trvalo ' + trvalo + ' ms)');
+
+ma(kruhu === 0, 'vypnutá vrstva území nekreslí nic', kruhu + ' kruhů');
+
+// Vrstva území musí stát jeden kruh na území, ne na místo — jinak by se u
+// stovky měst kreslilo dva tisíce tvarů a mapa by se sekla stejně jako dřív.
+console.log('\nTáž mapa se zapnutou vrstvou území');
+ctx.UZEMI_VRSTVA = true;
+ctx.UZEMI_MAPA = [
+  { area_key: 'mesto0', nazev: 'Město 0', lat: 50, lon: 15, master_nick: 'ja', moje: true, poplatek_pct: 100 },
+  { area_key: 'mesto1', nazev: 'Město 1', lat: 50.1, lon: 15.1, master_nick: 'kdosi', moje: false, poplatek_pct: 120 },
+];
+kruhu = 0; markeru = 0; ikon = 0;
+const start2 = Date.now();
+ctx.drawMap();
+const trvalo2 = Date.now() - start2;
+ma(kruhu === 2, 'jeden kruh na území, ne na místo', kruhu + ' kruhů na ' + (MEST * MIST) + ' míst');
+ma(trvalo2 < trvalo + 60, 'vrstva území překreslení znatelně neprodraží',
+  trvalo2 + ' ms proti ' + trvalo + ' ms');
+ctx.UZEMI_VRSTVA = false; ctx.UZEMI_MAPA = null;
 
 console.log('\nV kódu po sobě nesmí zůstat ani jedno hledání v poli');
 const vnitrek = telo(zdroj, 'drawMap');

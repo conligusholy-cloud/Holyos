@@ -91,6 +91,33 @@ router.get('/unie/prehled', requirePlayer, jenUnie, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── Území na mapě ───────────────────────────────────────────────────────────
+// Lehký seznam pro vrstvu na mapě: kde území leží, kdo ho drží a jestli je
+// moje. Žádné vyúčtování se tu nepočítá — mapa se překresluje často.
+router.get('/unie/mapa', requirePlayer, jenUnie, async (req, res, next) => {
+  try {
+    const uzemi = await prisma.gameTerritory.findMany({
+      select: { area_key: true, master_id: true, master_nick: true, poplatek_pct: true, nespokojenost: true },
+    });
+    if (!uzemi.length) return res.json({ ok: true, uzemi: [] });
+    const oblasti = await prisma.gameArea.findMany({
+      where: { key: { in: uzemi.map((t) => t.area_key) } },
+      select: { key: true, name: true, lat: true, lon: true },
+    });
+    const mapa = {};
+    oblasti.forEach((o) => { mapa[o.key] = o; });
+    // Nespokojenost se počítá, ne čte: uložená hodnota se posouvá až při
+    // vyúčtování, takže čerstvě koupené území by hlásilo nulu.
+    const nast = await UNIE.nastaveni();
+    res.json({ ok: true, uzemi: uzemi.map((t) => {
+      const o = mapa[t.area_key] || {};
+      return { area_key: t.area_key, nazev: o.name || t.area_key, lat: o.lat, lon: o.lon,
+        master_nick: t.master_nick, moje: t.master_id === req.player.id,
+        poplatek_pct: t.poplatek_pct, nespokojenost: UNIE.nespokojenostZ(t.poplatek_pct, nast) };
+    }).filter((t) => t.lat != null) });
+  } catch (e) { next(e); }
+});
+
 // ─── Převzetí volného území ──────────────────────────────────────────────────
 router.post('/unie/uzemi/prevzit', requirePlayer, jenUnie, async (req, res, next) => {
   try {

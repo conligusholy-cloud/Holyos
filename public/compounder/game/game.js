@@ -4204,9 +4204,45 @@ function vykresliShluky(kusy, vrstva) {
       });
   });
 }
+// ─── Vrstva území (Unie) ─────────────────────────────────────────────────────
+// Území je oblast, ne hranice na mapě — kreslí se proto jako kruh kolem středu
+// města. Zelený je tvůj, červený cizí. Zapíná se vlaječkou nad mapou, ať
+// nepřekáží hráčům, kteří pozdní hru nehrají.
+var UZEMI_MAPA = null;        // poslední seznam ze serveru
+var UZEMI_VRSTVA = false;     // svítí vlaječka?
+var UZEMI_R = 7000;           // poloměr kruhu v metrech
+function nactiUzemiMapu(then) {
+  api('/unie/mapa', { method: 'GET' }).then(function (r) {
+    UZEMI_MAPA = (r.ok && r.j.uzemi) || [];
+    if (then) then();
+  }).catch(function () { UZEMI_MAPA = []; if (then) then(); });
+}
+function kresliUzemi() {
+  if (!UZEMI_VRSTVA || !UZEMI_MAPA || !window.L) return;
+  UZEMI_MAPA.forEach(function (u) {
+    if (u.lat == null || u.lon == null) return;
+    var barva = u.moje ? '#22c55e' : '#ef4444';
+    L.circle([u.lat, u.lon], { radius: UZEMI_R, color: barva, weight: 2,
+      opacity: 0.75, fillColor: barva, fillOpacity: 0.07, interactive: true })
+      .addTo(layer)
+      .bindTooltip((u.moje ? '🏳️ ' : '🚩 ') + esc(u.nazev) + ' — ' + esc(u.master_nick),
+        { direction: 'top', opacity: 0.9 })
+      .on('click', function () { uzemiNaMapeSheet(u); });
+  });
+}
+function uzemiNaMapeSheet(u) {
+  sheet('<h3>' + (u.moje ? '🏳️ ' : '🚩 ') + esc(u.nazev) + '</h3>'
+    + '<p class="muted small">' + esc(u.moje ? tx('hra.unie_moje_uzemi') : tx('veta.unie_drzi', { p1: u.master_nick })) + '</p>'
+    + '<div class="kv"><span>' + esc(tx('hra.unie_poplatek')) + '</span><b>' + u.poplatek_pct + ' %</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.unie_nespokojenost')) + '</span><b>' + (u.nespokojenost || 0) + ' / 100</b></div>'
+    + '<button class="btn big" id="uzemi-do-site" style="margin-top:12px">' + esc(tx('hra.unie_otevrit_sekci')) + '</button>');
+  $('uzemi-do-site').onclick = function () { closeSheet(); switchTab('net'); netZalozka('unie'); };
+}
+
 function drawMap() {
   if (!layer) return;
   layer.clearLayers();
+  kresliUzemi();
   var any = false, zname = {}, skryto = 0, skrytoCizi = 0, kusy = [];
   var blizko = !map || map.getZoom() >= MISTA_OD_ZOOMU;
   var moje = MAPA_MOJE;
@@ -7736,6 +7772,7 @@ function paint() {
   refreshUnits();
   paintHlavicka();
   unieTab();
+  unieMapaBind();
   // Hlavička se hýbe pořád, obsah záložky počká, až hráč dopíše.
   if (pisePrave()) return;
   if (!$('v-shop').classList.contains('hidden')) paintShop();
@@ -7843,8 +7880,23 @@ function netZalozka(kam) {
 // kontroluje znovu u každého požadavku, tohle je jen schování tlačítka.
 var UNIE = null;            // poslední přehled ze serveru
 function unieTab() {
-  var b = $('net-tab-unie'); if (!b) return;
-  b.classList.toggle('hidden', !(ME && ME.unie));
+  var b = $('net-tab-unie'); if (b) b.classList.toggle('hidden', !(ME && ME.unie));
+  var m = $('uzemi-btn');
+  if (m) {
+    m.classList.toggle('hidden', !(ME && ME.unie));
+    m.classList.toggle('on', UZEMI_VRSTVA);
+  }
+}
+// Vlaječka nad mapou: zapne a vypne vrstvu území.
+function unieMapaBind() {
+  var b = $('uzemi-btn'); if (!b || b._unie) return;
+  b._unie = true;
+  b.onclick = function () {
+    UZEMI_VRSTVA = !UZEMI_VRSTVA;
+    b.classList.toggle('on', UZEMI_VRSTVA);
+    if (UZEMI_VRSTVA && !UZEMI_MAPA) nactiUzemiMapu(function () { drawMap(); });
+    else drawMap();
+  };
 }
 function paintUnie() {
   var box = $('unie-body'); if (!box) return;
@@ -7882,7 +7934,7 @@ function unieUzemiKarta(u, nast) {
   var zavazek = '<div class="kv"><span>' + esc(tx('hra.unie_zavazek')) + '</span><b>'
     + cislo1(u.zavazek_pridano) + ' / ' + cislo1(u.zavazek) + '</b></div>';
   if (!u.moje) {
-    return '<div class="card"><div class="row"><h3>' + esc(u.area_key) + '</h3><b>' + esc(u.master_nick) + '</b></div>'
+    return '<div class="card"><div class="row"><h3>' + esc(u.nazev || u.area_key) + '</h3><b>' + esc(u.master_nick) + '</b></div>'
       + '<div class="kv"><span>' + esc(tx('hra.unie_poplatek')) + '</span><b>' + u.poplatek_pct + ' %</b></div>'
       + '<div class="kv"><span>' + esc(tx('hra.unie_nespokojenost')) + '</span><b>' + u.nespokojenost + ' / 100</b></div>'
       + nespBar + zavazek + vyzva
@@ -7892,7 +7944,14 @@ function unieUzemiKarta(u, nast) {
         : '<p class="fine">' + esc(tx('hra.unie_zatim_drzi')) + '</p>')
       + '</div>';
   }
-  return '<div class="card"><div class="row"><h3>' + esc(u.area_key) + '</h3><b class="ok">' + esc(tx('hra.unie_moje_uzemi')) + '</b></div>'
+  return '<div class="card"><div class="row"><h3>' + esc(u.nazev || u.area_key) + '</h3><b class="ok">' + esc(tx('hra.unie_moje_uzemi')) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.unie_cizich')) + '</span><b>' + cislo1(u.cizich || 0) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.unie_nese_mesicne')) + '</span><b class="' + (u.prijem_mesic ? 'ok' : 'muted') + '">'
+    + kcFull(u.prijem_mesic || 0) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.unie_operator')) + '</span><b>'
+    + (u.operator_nick ? esc(u.operator_nick) + ' (' + u.operator_podil + ' %)'
+      : (u.operator_cena ? esc(tx('veta.unie_nabidnuta_za', { p1: kcFull(u.operator_cena) })) : '—')) + '</b></div>'
+    + unieCoDal(u)
     + '<label class="fine">' + esc(tx('hra.unie_poplatek')) + ': <b data-pct-pro="' + esc(u.area_key) + '">' + u.poplatek_pct + ' %</b></label>'
     + pasmo
     + '<p class="fine">' + esc(tx('hra.unie_pasmo_popis')) + '</p>'
@@ -7907,6 +7966,18 @@ function unieUzemiKarta(u, nast) {
     + esc(tx('hra.unie_doplatit_licenci')) + '</button>'
     + '<button class="btn sec sm" data-unie-vypsat="' + esc(u.area_key) + '">' + esc(tx('hra.unie_vypsat_licenci')) + '</button>'
     + '</div>' + vyzva + '</div>';
+}
+// Co s územím dělat. Hráč, který právě koupil území, kouká na prázdnou kartu
+// a neví, proč ji drží — tohle mu pokaždé řekne jeden další krok.
+function unieCoDal(u) {
+  var rada;
+  if (!u.cizich) rada = tx('hra.unie_rada_nikdo');
+  else if (!u.operator_nick && !u.operator_cena) rada = tx('hra.unie_rada_operator');
+  else if (u.zavazek_pridano < u.zavazek) rada = tx('veta.unie_rada_zavazek', { p1: cislo1(u.zavazek - u.zavazek_pridano) });
+  else if (u.nespokojenost >= u.vyzva_prah) rada = tx('hra.unie_rada_nespokojenost');
+  else rada = tx('hra.unie_rada_rust');
+  return '<p class="fine" style="margin:8px 0 0;padding:8px 10px;border-radius:10px;background:rgba(124,92,255,.10)">'
+    + '<b>' + esc(tx('hra.unie_co_ted')) + '</b> ' + esc(rada) + '</p>';
 }
 function unieDuvod(k) {
   if (k === 'nespokojenost') return tx('hra.unie_duvod_nespokojenost');

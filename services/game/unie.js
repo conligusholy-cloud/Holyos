@@ -273,7 +273,34 @@ async function pridanoOdPrevzeti(t) {
 async function uzemiPub(t, meId, nast) {
   const n = nast || await nastaveni();
   const pridano = await pridanoOdPrevzeti(t);
+  // Co území dělá: kolik v něm stojí cizích prádlomatů, co z nich masterovi
+  // za herní měsíc plyne a jestli tu někdo servisuje. Bez těchhle tří čísel
+  // drží hráč území a neví, proč ho drží.
+  const [cizi, licence, area] = await Promise.all([
+    prisma.gameSpotClaim.findMany({
+      where: { area_key: t.area_key, model: { not: '' }, player_id: { not: t.master_id } },
+      select: { model: true, score: true, rent: true, pozemek: true, nick: true },
+    }),
+    prisma.gameOperatorLicence.findFirst({ where: { area_key: t.area_key, zrusena: false } }),
+    prisma.gameArea.findUnique({ where: { key: t.area_key }, select: { name: true, spots: true } }).catch(() => null),
+  ]);
+  const operatorPct = licence ? Math.max(0, Math.min(100, licence.podil_pct)) : 0;
+  let proMastera = 0, proOperatora = 0, odvedou = 0;
+  cizi.forEach((c) => {
+    const r = rozpad(servisMista(c), t.poplatek_pct, operatorPct, n.odvod_pct);
+    proMastera += r.master; proOperatora += r.operator; odvedou += r.odvod;
+  });
+  const spots = Array.isArray(area && area.spots) ? area.spots : [];
   return {
+    nazev: (area && area.name) || t.area_key,
+    cizich: cizi.length,
+    mist: spots.length,
+    prijem_mesic: proMastera,
+    operator_prijem: proOperatora,
+    odvod_mesic: odvedou,
+    operator_nick: licence ? licence.nick : null,
+    operator_podil: licence ? licence.podil_pct : null,
+    operator_cena: t.operator_cena || null,
     area_key: t.area_key,
     master_id: t.master_id,
     master_nick: t.master_nick,
