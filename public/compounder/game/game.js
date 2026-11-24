@@ -7970,7 +7970,9 @@ function unieUzemiKarta(u, nast) {
       + '</div>';
   }
   return '<div class="card"><div class="row"><h3>' + esc(u.nazev || u.area_key) + '</h3><b class="ok">' + esc(tx('hra.unie_moje_uzemi')) + '</b></div>'
-    + '<div class="kv"><span>' + esc(tx('hra.unie_cizich')) + '</span><b>' + cislo1(u.cizich || 0) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.unie_stroju')) + '</span><b>' + cislo1(u.stroju || 0)
+    + (u.cizich ? ' <i class="muted small">' + tx('veta.unie_z_toho_cizich', { p1: cislo1(u.cizich) }) + '</i>' : '')
+    + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.unie_nese_mesicne')) + '</span><b class="' + (u.prijem_mesic ? 'ok' : 'muted') + '">'
     + kcFull(u.prijem_mesic || 0) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.unie_operator')) + '</span><b>'
@@ -7996,7 +7998,8 @@ function unieUzemiKarta(u, nast) {
 // a neví, proč ji drží — tohle mu pokaždé řekne jeden další krok.
 function unieCoDal(u) {
   var rada;
-  if (!u.cizich) rada = tx('hra.unie_rada_nikdo');
+  if (!u.stroju) rada = tx('hra.unie_rada_prazdno');
+  else if (!u.cizich) rada = tx('hra.unie_rada_nikdo');
   else if (!u.operator_nick && !u.operator_cena) rada = tx('hra.unie_rada_operator');
   else if (u.zavazek_pridano < u.zavazek) rada = tx('veta.unie_rada_zavazek', { p1: cislo1(u.zavazek - u.zavazek_pridano) });
   else if (u.nespokojenost >= u.vyzva_prah) rada = tx('hra.unie_rada_nespokojenost');
@@ -8641,7 +8644,7 @@ function uzemiRadek(x) {
     + (x.id ? ' data-hrac="' + x.id + '"' : '') + '>'
     + '<i class="poradi' + (x.poradi <= 3 ? ' medaile m' + x.poradi : '') + '">' + x.poradi + '</i>'
     + '<span class="nick">' + zlocinJmeno(x.id, x.nick)
-    + '<i>' + esc(role) + ' · ' + tx('veta.unie_zeb_radek', { p1: cislo1(x.uzemi), p2: cislo1(x.cizich) }) + '</i></span>'
+    + '<i>' + esc(role) + ' · ' + tx('veta.unie_zeb_radek', { p1: cislo1(x.uzemi), p2: cislo1(x.stroju) }) + '</i></span>'
     + '<b>' + kcFull(x.hodnota) + '</b></div>';
 }
 function zemeRadek(z) {

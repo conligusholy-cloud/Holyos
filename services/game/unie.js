@@ -166,6 +166,23 @@ function rozpad(servis, poplatekPct, operatorPct, odvodPct) {
   return { zaklad, odvod, master, operator, priplatek };
 }
 
+// Odvod z jednoho prádlomatu v území. Servis platí zákazník, který do
+// prádlomatu přišel — čí ten prádlomat je, je území jedno, a tak se počítá
+// i ze strojů samotného mastera. Dřív se jeho síť vynechávala a území plné
+// vlastních strojů nenslo nic, což nedávalo smysl ani tematicky.
+//
+// Sám sobě si ale nikdo nepřiplácí: u masterových strojů se poplatek zastropí
+// na sto procentech, takže odvod nikdy nepřeroste základ a příplatek nemá
+// z čeho vzniknout. Jinak by si master přehazoval peníze z kapsy do kapsy.
+// Operátor svůj díl bere ze všeho — servisuje i masterovy stroje.
+function odvodZMista(c, t, operatorPct, odvodPct) {
+  const vlastni = Number(c.player_id) === Number(t.master_id);
+  const pct = vlastni
+    ? Math.min(100, Number(t.poplatek_pct) || 100)
+    : t.poplatek_pct;
+  return rozpad(servisMista(c), pct, operatorPct, odvodPct);
+}
+
 // ─── Vyúčtování území ────────────────────────────────────────────────────────
 // Projde jedno území a za každý celý herní měsíc od posledního vyúčtování
 // rozešle doručenky: masterovi a operátorovi příjem, majiteli prádlomatu
@@ -178,7 +195,7 @@ async function vyuctujUzemi(t, nastIn) {
   if (mesicu < 1) return { mesicu: 0, master: 0, operator: 0 };
   const [mista, licence] = await Promise.all([
     prisma.gameSpotClaim.findMany({
-      where: { area_key: t.area_key, model: { not: '' }, player_id: { not: t.master_id } },
+      where: { area_key: t.area_key, model: { not: '' } },
       select: { spot_id: true, player_id: true, nick: true, name: true, model: true, score: true, rent: true, pozemek: true },
     }),
     prisma.gameOperatorLicence.findMany({ where: { area_key: t.area_key, zrusena: false } }),
@@ -189,7 +206,7 @@ async function vyuctujUzemi(t, nastIn) {
   let proMastera = 0, proOperatora = 0;
   const priplatky = new Map();   // player_id → { castka, nick }
   mista.forEach((c) => {
-    const r = rozpad(servisMista(c), t.poplatek_pct, operatorPct, nast.odvod_pct);
+    const r = odvodZMista(c, t, operatorPct, nast.odvod_pct);
     proMastera += r.master * mesicu;
     proOperatora += r.operator * mesicu;
     if (r.priplatek > 0) {
@@ -276,24 +293,25 @@ async function uzemiPub(t, meId, nast) {
   // Co území dělá: kolik v něm stojí cizích prádlomatů, co z nich masterovi
   // za herní měsíc plyne a jestli tu někdo servisuje. Bez těchhle tří čísel
   // drží hráč území a neví, proč ho drží.
-  const [cizi, licence, area] = await Promise.all([
+  const [vsechny, licence, area] = await Promise.all([
     prisma.gameSpotClaim.findMany({
-      where: { area_key: t.area_key, model: { not: '' }, player_id: { not: t.master_id } },
-      select: { model: true, score: true, rent: true, pozemek: true, nick: true },
+      where: { area_key: t.area_key, model: { not: '' } },
+      select: { player_id: true, model: true, score: true, rent: true, pozemek: true, nick: true },
     }),
     prisma.gameOperatorLicence.findFirst({ where: { area_key: t.area_key, zrusena: false } }),
     prisma.gameArea.findUnique({ where: { key: t.area_key }, select: { name: true, spots: true } }).catch(() => null),
   ]);
   const operatorPct = licence ? Math.max(0, Math.min(100, licence.podil_pct)) : 0;
   let proMastera = 0, proOperatora = 0, odvedou = 0;
-  cizi.forEach((c) => {
-    const r = rozpad(servisMista(c), t.poplatek_pct, operatorPct, n.odvod_pct);
+  vsechny.forEach((c) => {
+    const r = odvodZMista(c, t, operatorPct, n.odvod_pct);
     proMastera += r.master; proOperatora += r.operator; odvedou += r.odvod;
   });
   const spots = Array.isArray(area && area.spots) ? area.spots : [];
   return {
     nazev: (area && area.name) || t.area_key,
-    cizich: cizi.length,
+    stroju: vsechny.length,
+    cizich: vsechny.filter((c) => Number(c.player_id) !== Number(t.master_id)).length,
     mist: spots.length,
     prijem_mesic: proMastera,
     operator_prijem: proOperatora,
@@ -347,29 +365,28 @@ async function zebricekUzemi() {
   const operatori = {};
   uzemi.forEach((t) => {
     const m = masteri[t.master_id] = masteri[t.master_id]
-      || { id: t.master_id, nick: t.master_nick, uzemi: 0, cizich: 0, prijem: 0 };
+      || { id: t.master_id, nick: t.master_nick, uzemi: 0, stroju: 0, prijem: 0 };
     m.uzemi++;
     const lic = operatorVOblasti[t.area_key] || null;
     const opPct = lic ? Math.max(0, Math.min(100, lic.podil_pct)) : 0;
     (podleOblasti[t.area_key] || []).forEach((c) => {
-      if (c.player_id === t.master_id) return;   // vlastní síť si sám sobě neplatí
-      const r = rozpad(servisMista(c), t.poplatek_pct, opPct, nast.odvod_pct);
-      m.cizich++; m.prijem += r.master;
+      const r = odvodZMista(c, t, opPct, nast.odvod_pct);
+      m.stroju++; m.prijem += r.master;
       if (lic) {
         const o = operatori[lic.player_id] = operatori[lic.player_id]
-          || { id: lic.player_id, nick: lic.nick, uzemi: 0, cizich: 0, prijem: 0, operator: true };
-        o.prijem += r.operator; o.cizich++;
+          || { id: lic.player_id, nick: lic.nick, uzemi: 0, stroju: 0, prijem: 0, operator: true };
+        o.prijem += r.operator; o.stroju++;
       }
     });
   });
   Object.values(operatori).forEach((o) => { o.uzemi = licence.filter((l) => l.player_id === o.id).length; });
   const vse = Object.values(masteri).concat(Object.values(operatori));
-  return vse.sort((a, b) => b.prijem - a.prijem || b.cizich - a.cizich);
+  return vse.sort((a, b) => b.prijem - a.prijem || b.stroju - a.stroju);
 }
 
 module.exports = {
   KEY, MESIC_MS, ROK_MS, VYCHOZI,
   nastaveni, ulozNastaveni, role, pocetStroju, potencial,
-  nespokojenostZ, duvodVyzvy, servisMista, rozpad,
+  nespokojenostZ, duvodVyzvy, servisMista, rozpad, odvodZMista,
   vyuctujUzemi, vyhodnotVyzvu, pridanoOdPrevzeti, uzemiPub, zebricekUzemi,
 };

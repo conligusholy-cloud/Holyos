@@ -90,7 +90,7 @@ router.get('/unie/prehled', requirePlayer, jenUnie, async (req, res, next) => {
       const u = pub.filter((x) => x.area_key === l.area_key)[0] || {};
       return { area_key: l.area_key, nazev: u.nazev || l.area_key, cena: l.cena,
         podil_pct: l.podil_pct, od: l.od, do_kdy: l.do_kdy,
-        prijem_mesic: u.operator_prijem || 0, cizich: u.cizich || 0 };
+        prijem_mesic: u.operator_prijem || 0, stroju: u.stroju || 0, cizich: u.cizich || 0 };
     }) });
   } catch (e) { next(e); }
 });

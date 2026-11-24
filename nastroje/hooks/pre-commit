@@ -498,6 +498,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
+# Z čeho území odvádí. Vyúčtování, karta území a žebříček Unie se musí ptát
+# stejně — rozejdou se tiše a hráč pak vidí jiné číslo, než co mu přijde.
+if git diff --cached --name-only | grep -qE 'services/game/unie|routes/game-unie|public/compounder/game/game.js|services/game/texty/'; then
+  if ! node nastroje/tunieodvod.js; then
+    echo ""
+    echo "STOP: odvod v území nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Kdy se hráči ukáže záložka Unie. Povolení se přidává za běhu, ale hra si
 # ho brala jen při načtení — přidaný hráč pak neviděl nic.
 if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|public/compounder/game/index.html|routes/game-account|services/game/unie'; then
