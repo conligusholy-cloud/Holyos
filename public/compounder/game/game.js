@@ -13137,12 +13137,20 @@ function marketLokality(vse) {
   });
   return lok;
 }
-// Co z ceny je na co. Prodávající si marži neříká, vyjde z rozdílu — kupující
-// tím pádem vidí, kolik platí za práci navíc, a ne jen jedno holé číslo.
+// Na Market place patří jen to, za co někdo v okrese ručí. Ojeté provozovny
+// od kohokoli zůstávají na tržišti — výloha, která slibuje nový stroj
+// a zodpovědného prodávajícího, nemůže být zároveň bazar.
+function marketNabidky(vse) {
+  return (vse || []).filter(function (n) {
+    return n && (n.druh === 'misto' || n.druh === 'se_strojem');
+  });
+}
+// Co z ceny je na co. Cena stroje se nesmlouvá — je z ceníku, stejná jako
+// v obchodě. Master si nacení jedinou věc: co stálo místo najít a připravit.
 function marketRozpis(n) {
-  var poz = Math.max(0, Math.round(n.cena_misto || 0));
-  var pri = Math.max(0, Math.round(n.cena_pripojky || 0));
-  return { pozemek: poz, pripojky: pri, marze: Math.max(0, Math.round((n.cena || 0) - poz - pri)) };
+  var misto = Math.max(0, Math.round(n.cena_pripojky != null ? n.cena_pripojky : (n.cena || 0)));
+  var stroj = Math.max(0, Math.round(n.cena_stroj || 0));
+  return { misto: misto, stroj: stroj, celkem: misto + stroj };
 }
 function marketPolozka(n) {
   var misto = n.druh === 'misto';
@@ -13153,8 +13161,8 @@ function marketPolozka(n) {
       + '<b class="' + (n.moje ? 'warn' : 'ok') + '">' + kcFull(n.cena) + '</b></div>'
       + '<i>' + esc(tx(misto ? 'market.druh_misto' : 'market.druh_provozovna'))
       + ' · ' + esc(m.name) + (n.moje ? ' · ' + esc(tx('market.moje_nabidka')) : '') + '</i>'
-      + '<i>' + esc(n.firma || n.nick) + (n.pobocka
-          ? ' · ' + esc(tx('market.servis_zajistuje')) + ' ' + esc(n.pobocka) : '') + '</i>'
+      + '<i>' + esc(n.firma || n.nick) + ' · ' + esc(tx('market.garantuje'))
+      + (n.pobocka ? ' · ' + esc(tx('market.servis_zajistuje')) + ' ' + esc(n.pobocka) : '') + '</i>'
       + '<button class="btn ' + (n.moje ? 'sec ' : '') + 'sm" style="width:100%;margin-top:7px" '
       + 'data-market-n="' + n.id + '">'
       + esc(n.moje ? tx('hra.prohlednout_a_koupit') : tx('market.koupit')) + '</button>'
@@ -13166,7 +13174,7 @@ function marketSheet() {
       + '<p class="muted small">' + esc(tx('hra.nacitam')) + '</p>');
     return loadTrh(marketSheet);
   }
-  var vse = (TRH || []).slice();
+  var vse = marketNabidky(TRH);
   var lok = marketLokality(vse);
   var klice = Object.keys(lok).sort();
   if (MARKET_LOK && !lok[MARKET_LOK]) MARKET_LOK = null;
@@ -13178,7 +13186,8 @@ function marketSheet() {
     return c && c.mine && c.pripraveno && !trhMoje(id);
   });
   sheet('<h3>🏬 ' + esc(tx('market.nazev')) + '</h3>'
-    + '<p class="muted small" style="margin:2px 0 10px">' + esc(tx('market.popis')) + '</p>'
+    + '<p class="muted small" style="margin:2px 0 4px">' + esc(tx('market.popis')) + '</p>'
+    + '<p class="fine" style="margin:0 0 10px">' + esc(tx('market.zaruka')) + '</p>'
     + (klice.length > 1
       ? '<div class="map-prep" style="flex-wrap:wrap;gap:6px;margin-bottom:10px">'
         + '<button class="' + (MARKET_LOK ? '' : 'on') + '" data-market-lok="">'
@@ -13226,9 +13235,8 @@ function marketKoupitSheet(n) {
     + '<div class="kv"><span>' + esc(tx('market.pripraveno_pro')) + '</span><b>' + esc(m.name) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.najem_za_mesic')) + '</span><b>' + kcFull(n.rent || 0) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('market.skore')) + '</span><b>' + (n.score || 0) + ' / 100</b></div>'
-    + '<div class="kv"><span>' + esc(tx('market.rozpis_pozemek')) + '</span><b>' + kcFull(r.pozemek) + '</b></div>'
-    + '<div class="kv"><span>' + esc(tx('market.rozpis_pripojky')) + '</span><b>' + kcFull(r.pripojky) + '</b></div>'
-    + (r.marze ? '<div class="kv"><span>' + esc(tx('market.rozpis_marze')) + '</span><b>' + kcFull(r.marze) + '</b></div>' : '')
+    + '<div class="kv"><span>' + esc(tx('market.rozpis_misto')) + '</span><b>' + kcFull(r.misto) + '</b></div>'
+    + (r.stroj ? '<div class="kv"><span>' + esc(tx('market.rozpis_stroj')) + '</span><b>' + kcFull(r.stroj) + '</b></div>' : '')
     + '<div class="kv souhrn"><span>' + esc(tx('market.cena_celkem')) + '</span><b class="'
     + (n.cena > mam ? 'err' : 'ok') + '">' + kcFull(n.cena) + '</b></div>'
     + volneHtml(null)
@@ -13274,8 +13282,9 @@ function marketVypsatSheet(ids) {
         return '<option value="' + esc(k) + '"' + (k === 'flex' ? ' selected' : '') + '>'
           + esc(MODELS[k].name) + '</option>';
       }).join('') + '</select></label>'
-    + '<label class="fld"><span>' + esc(tx('market.cena_celkem')) + '</span>'
+    + '<label class="fld"><span>' + esc(tx('market.rozpis_misto')) + '</span>'
     + '<input id="mv-cena" class="inp" type="number" inputmode="numeric" min="1000" step="10000" value="500000"></label>'
+    + '<p class="fine">' + esc(tx('market.zaruka')) + '</p>'
     + '<button class="btn big" id="mv-ok" style="width:100%;margin-top:10px">'
     + esc(tx('market.vypsat_misto')) + '</button>');
   $('mv-ok').onclick = function () {

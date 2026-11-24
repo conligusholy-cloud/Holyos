@@ -14,6 +14,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const acct = require('./game-account.routes');
+const OKRESY = require('../services/game/okresy');
 const PRAVA = require('../services/game/prava');
 // Dividendu potřebuje i obsluha fondu, ne jen vlastní politika firmy.
 const DIVIDENDA = require('../services/game/dividenda');
@@ -3880,6 +3881,12 @@ function trhPub(m, ja) {
     // ceny a čím se prodávající zaručuje za servis.
     druh: m.druh || 'provozovna', model_pro: m.model_pro || null,
     cena_misto: m.cena_misto, cena_pripojky: m.cena_pripojky,
+    // Cena stroje se neukládá k nabídce — bere se z ceníku teď, ať nezůstane
+    // viset číslo z doby, kdy stroje stály jinak. U místa bez stroje je nula.
+    // Ceník, ne uložené číslo: Market place slibuje nový stroj za ceníkovou
+    // cenu, ne za cenu z doby, kdy se nabídka vypsala.
+    cena_stroj: (m.druh === 'se_strojem' && m.model_pro)
+      ? (JMENI.CENY_STROJU[m.model_pro] || 0) : 0,
     pobocka: m.pobocka || null, area_key: m.area_key || null,
   };
 }
@@ -3943,8 +3950,10 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
   if (!c || c.player_id !== req.player.id) return res.status(409).json({ error: stx(req)('server.tohle_misto_ti_nepatri') });
   if (c.najemce_id) return res.status(409).json({ error: stx(req)('server.pozemek_mas_pronajaty_jinemu_hraci') });
   // Market place: bez stroje se smí nabídnout jen PŘIPRAVENÉ místo, a jen
-  // tomu, kdo v té lokalitě má pobočku. Prázdná parcela bez přípojek je pro
-  // kupujícího totéž co kus mapy a servis by za ni nikdo nezaručil.
+  // tomu, kdo za ně v okrese ručí — masterovi území nebo jeho operátorovi.
+  // Market place má být záruka, ne vývěska: kupující si kupuje i to, že se
+  // o místo má kdo starat. K tomu pobočka v lokalitě, jinak servis nemá kdo
+  // dojet. Prázdná parcela bez přípojek je pro kupujícího totéž co kus mapy.
   const jenMisto = !c.model;
   let pobocka = null, modelPro = null;
   if (jenMisto) {
@@ -3952,8 +3961,15 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
     if (!(await acct._unieSmi(req.player.id))) {
       return res.status(403).json({ error: stx(req)('server.unie_zatim_nedostupna') });
     }
-    const oblast = await prisma.gameArea.findUnique({ where: { key: c.area_key },
-      select: { name: true } }).catch(() => null);
+    const oblast = await prisma.gameArea.findUnique({ where: { key: c.area_key } }).catch(() => null);
+    const okres = oblast ? await OKRESY.proOblast(oblast).catch(() => null) : null;
+    const uzemi = okres ? await prisma.gameTerritory.findUnique({ where: { okres_key: okres.key } }).catch(() => null) : null;
+    const licence = okres ? await prisma.gameOperatorLicence.findFirst({
+      where: { okres_key: okres.key, player_id: req.player.id, zrusena: false } }).catch(() => null) : null;
+    const jsemMaster = !!(uzemi && uzemi.master_id === req.player.id);
+    if (!jsemMaster && !licence) {
+      return res.status(409).json({ error: stx(req)('server.market_jen_master') });
+    }
     const pob = pobockaVLokalite(stavu(req.player), c, oblast && oblast.name);
     if (!pob) return res.status(409).json({ error: stx(req)('server.market_bez_pobocky') });
     pobocka = String(pob.name || '').slice(0, 80);
@@ -3970,10 +3986,12 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
     player_id: req.player.id, nick: req.player.nick, firma: req.player.company,
     spot_id: spot, area_key: c.area_key, name: c.name, model: c.model,
     druh: jenMisto ? 'misto' : 'provozovna', model_pro: modelPro, pobocka,
-    // Rozpis: co je za pozemek a co za přípojky. Zbytek ceny je marže
-    // prodávajícího a tu si hlídá kupující sám.
+    // U místa si master nacení jedinou věc: co stálo místo najít, připravit
+    // a co je na něm navíc (třeba že tu prádlomat už stál a čísla jsou známá).
+    // Cena stroje se nesmlouvá — bere se z ceníku, protože Market place slibuje
+    // nový stroj, ne bazar.
     cena_misto: jenMisto ? Math.max(0, Math.round(c.cena || 0)) : null,
-    cena_pripojky: jenMisto ? Math.max(0, Math.round(c.pripojky || 0)) : null,
+    cena_pripojky: jenMisto ? cena : null,
     kind: s(b.kind, 40) || null, score: Math.max(0, Math.min(100, Math.round(Number(b.score) || 60))),
     lat: c.lat, lon: c.lon, rent: Math.max(0, Math.round(c.rent || 0)),
     zisk: Math.round(Number(b.zisk) || 0), obrat: Math.max(0, Math.round(Number(b.obrat) || 0)),
