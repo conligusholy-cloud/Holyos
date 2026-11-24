@@ -498,6 +498,16 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
+# Rozšiřování území o sousední okresy. Území si smíš vzít jen tam, kam
+# dosáhneš servisem — jinak jde skoupit půl republiky od stolu.
+if git diff --cached --name-only | grep -qE 'services/game/okresy|routes/game-unie|public/compounder/game/game.js'; then
+  if ! node nastroje/tunierozsireni.js; then
+    echo ""
+    echo "STOP: rozšiřování území nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Území Unie je okres, ne město. Zábor nese město, takže se mezi tím musí
 # překládat — bez toho území nenajde ani jeden stroj a tiše vychází nula.
 if git diff --cached --name-only | grep -qE 'services/game/okresy|services/game/unie|routes/game-unie|public/compounder/game/game.js|prisma/schema.prisma'; then

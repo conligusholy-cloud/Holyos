@@ -4214,14 +4214,41 @@ function vykresliShluky(kusy, vrstva) {
 var UZEMI_MAPA = null;        // poslední seznam ze serveru
 var UZEMI_VRSTVA = false;     // svítí vlaječka?
 var UZEMI_R = 7000;           // poloměr náhradního kruhu v metrech
+var UZEMI_SOUSEDI = null;     // okresy vedle mých — kam může území růst
 function nactiUzemiMapu(then) {
   api('/unie/mapa', { method: 'GET' }).then(function (r) {
     UZEMI_MAPA = (r.ok && r.j.uzemi) || [];
     if (then) then();
   }).catch(function () { UZEMI_MAPA = []; if (then) then(); });
 }
+// Těžiště obrysu — tam sedí odznak území i plus na rozšíření.
+function uzemiStred(u) {
+  if (u.hranice && u.hranice.length >= 4) {
+    var la = 0, lo = 0;
+    u.hranice.forEach(function (b) { la += b[0]; lo += b[1]; });
+    return [la / u.hranice.length, lo / u.hranice.length];
+  }
+  return (u.lat != null && u.lon != null) ? [u.lat, u.lon] : null;
+}
 function kresliUzemi() {
   if (!UZEMI_VRSTVA || !UZEMI_MAPA || !window.L) return;
+  // Sousedé: kam může území růst. Kreslí se slabě a s plusem uprostřed —
+  // ať je na první pohled vidět, že to zatím není tvoje, ale může být.
+  (UZEMI_SOUSEDI || []).forEach(function (n) {
+    var stred = uzemiStred(n);
+    if (n.hranice && n.hranice.length >= 4) {
+      L.polygon(n.hranice, { color: '#94a3b8', weight: 1, opacity: 0.6,
+        dashArray: '4 4', fillColor: '#94a3b8', fillOpacity: 0.04, interactive: false }).addTo(layer);
+    }
+    if (!stred) return;
+    L.marker(stred, { icon: L.divIcon({ className: 'uzemi-plus',
+      html: '<div class="pin uzemi-plus-pin">' + (n.drzi ? '🚩' : '＋') + '</div>',
+      iconSize: [30, 30], iconAnchor: [15, 15] }) })
+      .addTo(layer)
+      .bindTooltip(esc(n.nazev) + (n.drzi ? ' — ' + esc(n.drzi) : ''),
+        { direction: 'top', opacity: 0.9 })
+      .on('click', function () { unieSousedSheet(n); });
+  });
   UZEMI_MAPA.forEach(function (u) {
     var barva = u.moje ? '#22c55e' : '#ef4444';
     var styl = { color: barva, weight: 2, opacity: 0.75,
@@ -4237,6 +4264,54 @@ function kresliUzemi() {
         { direction: 'top', opacity: 0.9 })
       .on('click', function () { uzemiNaMapeSheet(u); });
   });
+}
+// Jeden soused: co v něm je a co stojí si ho vzít.
+function unieSousedSheet(n) {
+  var cena = Math.max(0, Math.round(n.licence || 0));
+  var muzu = !n.drzi && !!n.pobocka;
+  sheet('<h3>＋ ' + esc(n.nazev) + '</h3>'
+    + '<p class="muted small">' + esc(tx('unie.sousedi_popis')) + '</p>'
+    + (n.drzi ? '<p class="fine err">' + esc(tx('unie.soused_drzi', { p1: n.drzi })) + '</p>' : '')
+    + '<div class="kv"><span>' + esc(tx('hra.unie_volnych_mist')) + '</span><b>'
+    + cislo1(n.volnych || 0) + ' / ' + cislo1(n.mist || 0) + '</b></div>'
+    + (n.obyvatel ? '<div class="kv"><span>' + esc(tx('unie.obyvatel')) + '</span><b>'
+        + cislo1(n.obyvatel) + '</b></div>' : '')
+    + '<div class="kv"><span>' + esc(tx('hra.unie_prumerne_skore')) + '</span><b>' + (n.skore || 0) + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.unie_zavazek')) + '</span><b>' + cislo1(n.zavazek || 0) + '</b></div>'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.unie_licence')) + '</span><b>' + kcFull(cena) + '</b></div>'
+    + (n.pobocka
+      ? '<p class="fine ok">' + esc(tx('unie.soused_pobocka', { p1: n.pobocka })) + '</p>'
+      : '<p class="fine err">' + esc(tx('unie.soused_bez_pobocky')) + '</p>')
+    + (muzu
+      ? '<button class="btn big" id="sous-ok" style="width:100%;margin-top:10px">'
+        + esc(tx('unie.rozsirit')) + ' · ' + kcFull(cena) + '</button>'
+      : ''));
+  var b = $('sous-ok');
+  if (b) b.onclick = function () {
+    if (cena > volnaHotovost(null)) return toast(esc(tx('drazba.na_tohle_nemas_volnou_hotovost')), 'err');
+    b.disabled = true;
+    S.cash -= cena; zapis('nakup', tx('veta.unie_licence_za', { p1: n.nazev }), -cena); save();
+    apiJson('/unie/uzemi/prevzit', { okres_key: n.okres_key }).then(function (r) {
+      if (!r.ok) {
+        S.cash += cena; zapis('prijem', tx('veta.unie_licence_za', { p1: n.nazev }), cena, 0); save();
+        b.disabled = false;
+        return toast(esc((r.j && r.j.error) || tx('hra.nepovedlo_se_34')), 'err');
+      }
+      closeSheet(); paint(); syncState(true);
+      UZEMI_SOUSEDI = null; UZEMI_MAPA = null; UNIE = null;
+      nactiUzemiMapu(function () { drawMap(); });
+      toast(esc(tx('hra.unie_prevzato')), 'ok', true);
+    }).catch(function () {
+      S.cash += cena; zapis('prijem', tx('veta.unie_licence_za', { p1: n.nazev }), cena, 0); save();
+      b.disabled = false; toast(esc(tx('hra.server_neodpovida_35')), 'err');
+    });
+  };
+}
+function nactiSousedy(then) {
+  api('/unie/sousedi', { method: 'GET' }).then(function (r) {
+    UZEMI_SOUSEDI = (r.ok && r.j && r.j.sousedi) || [];
+    if (then) then();
+  }).catch(function () { UZEMI_SOUSEDI = []; if (then) then(); });
 }
 function uzemiNaMapeSheet(u) {
   sheet('<h3>' + (u.moje ? '🏳️ ' : '🚩 ') + esc(u.nazev) + '</h3>'
@@ -7905,6 +7980,13 @@ function unieMapaBind() {
     b.classList.toggle('on', UZEMI_VRSTVA);
     if (UZEMI_VRSTVA && !UZEMI_MAPA) nactiUzemiMapu(function () { drawMap(); });
     else drawMap();
+    // Sousedé se hledají přes cizí službu, takže to poprvé chvíli trvá —
+    // mapa se kvůli tomu nezdržuje a plusy doskočí, až dorazí.
+    if (UZEMI_VRSTVA && UZEMI_SOUSEDI == null) {
+      UZEMI_SOUSEDI = [];
+      toast(esc(tx('unie.sousedi_hledam')), 'ok');
+      nactiSousedy(function () { drawMap(); });
+    }
   };
 }
 function paintUnie() {

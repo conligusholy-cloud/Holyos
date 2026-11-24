@@ -57,12 +57,17 @@ sledovanePole.filter = function (f) { scanu++; return Array.prototype.filter.cal
 sledovanePole.forEach = function (f) { pruchodu++; return Array.prototype.forEach.call(this, f); };
 sledovanePole.some = function (f) { scanu++; return Array.prototype.some.call(this, f); };
 
-let ikon = 0, markeru = 0, kruhu = 0;
+let ikon = 0, markeru = 0, kruhu = 0, polygonu = 0;
 const kruh = () => { kruhu++; return { addTo: () => ({ bindTooltip: () => ({ on: () => {} }) }) }; };
+const polygon = () => { polygonu++; return { addTo: () => ({ bindTooltip: () => ({ on: () => {} }) }) }; };
 const ctx = {
   layer: { clearLayers: () => {} },
   map: { getZoom: () => 9, latLngToContainerPoint: (ll) => ({ x: ll[1] * 100, y: ll[0] * 100 }) },
-  L: { marker: () => { markeru++; return { addTo: () => ({ on: () => {} }) }; }, circle: kruh },
+  L: { marker: () => { markeru++; return { addTo: () => ({ on: () => {}, bindTooltip: () => ({ on: () => {} }) }) }; },
+    circle: kruh, polygon: polygon, divIcon: () => ({}) },
+  // Území Unie a okresy vedle nich. Kreslí se z obrysů, ne z míst — a právě
+  // to je tu k hlídání: ať to nezačne přibývat s velikostí sítě.
+  UZEMI_SOUSEDI: null,
   S: { areas: areas, units: sledovanePole, revealed: {}, pozemky: [], pobocky: [], sidlo: null,
     startedAt: Date.now() },
   CLAIMS: {},
@@ -93,6 +98,7 @@ const ctx = {
 ctx.window = ctx;
 vm.createContext(ctx);
 vm.runInContext(telo(zdroj, 'shlukuj') + '\n' + telo(zdroj, 'vykresliShluky') + '\n'
+  + telo(zdroj, 'uzemiStred') + '\n'
   + telo(zdroj, 'kresliUzemi') + '\n' + telo(zdroj, 'drawMap'), ctx);
 
 console.log('\nPřekreslení mapy u sítě o ' + (MEST * MIST) + ' místech a ' + STROJU + ' strojích');
@@ -125,6 +131,26 @@ const start2 = Date.now();
 ctx.drawMap();
 const trvalo2 = Date.now() - start2;
 ma(kruhu === 2, 'jeden kruh na území, ne na místo', kruhu + ' kruhů na ' + (MEST * MIST) + ' míst');
+
+// Sousedé: obrys a jedno plus na okres. Kdyby se kreslili z míst, přibývali
+// by s velikostí sítě a mapa by se s každým dalším strojem vlekla víc.
+ctx.UZEMI_SOUSEDI = [
+  { okres_key: 'cz:a', nazev: 'Okres A', lat: 50.2, lon: 15.2, hranice: [[50, 15], [50.3, 15], [50.3, 15.3], [50, 15.3]] },
+  { okres_key: 'cz:b', nazev: 'Okres B', lat: 49.8, lon: 14.8, hranice: null },
+];
+// Napřed bez sousedů, ať je proti čemu měřit: markery kreslí i místa sama.
+const sousedi = ctx.UZEMI_SOUSEDI;
+ctx.UZEMI_SOUSEDI = null;
+markeru = 0; polygonu = 0;
+ctx.drawMap();
+const markeruBez = markeru;
+ctx.UZEMI_SOUSEDI = sousedi;
+kruhu = 0; markeru = 0; polygonu = 0;
+ctx.drawMap();
+ma(polygonu === 1, 'soused s obrysem se nakreslí jednou', polygonu + ' polygonů');
+ma(markeru === markeruBez + 2, 'a plus dostane každý soused',
+  (markeru - markeruBez) + ' plusů navíc');
+ctx.UZEMI_SOUSEDI = null;
 ma(trvalo2 < trvalo + 60, 'vrstva území překreslení znatelně neprodraží',
   trvalo2 + ' ms proti ' + trvalo + ' ms');
 ctx.UZEMI_VRSTVA = false; ctx.UZEMI_MAPA = null;

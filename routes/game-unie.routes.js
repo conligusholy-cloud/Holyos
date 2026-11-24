@@ -22,6 +22,8 @@ const stx = acct._stx;
 const VYD = require('../services/game/vydaje');
 const UNIE = require('../services/game/unie');
 const OKRESY = require('../services/game/okresy');
+const UNIE_OKRESY = OKRESY;
+const stavu = (p) => (p && p.state) || {};
 
 router.use(express.json({ limit: '32kb' }));
 
@@ -167,6 +169,76 @@ router.get('/unie/mapa', requirePlayer, jenUnie, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── Sousedé: o co jde území rozšířit ────────────────────────────────────────
+// Vrací okresy vedle mých území i s cenou licence a s tím, jestli tam mám
+// pobočku. Hledání sousedů je drahé (dotaz na každý směr), takže první
+// otevření chvíli trvá; podruhé už se čte z databáze.
+router.get('/unie/sousedi', requirePlayer, jenUnie, async (req, res, next) => {
+  try {
+    const me = req.player;
+    const moje = await prisma.gameTerritory.findMany({ where: { master_id: me.id },
+      select: { okres_key: true } });
+    if (!moje.length) return res.json({ ok: true, sousedi: [] });
+    const mam = new Set(moje.map((t) => t.okres_key));
+    const klice = new Set();
+    for (const t of moje) {
+      (await UNIE_OKRESY.sousedi(t.okres_key).catch(() => [])).forEach((k) => {
+        if (!mam.has(k)) klice.add(k);
+      });
+    }
+    if (!klice.size) return res.json({ ok: true, sousedi: [] });
+    const [uzemi, okresy] = await Promise.all([
+      prisma.gameTerritory.findMany({ where: { okres_key: { in: [...klice] } },
+        select: { okres_key: true, master_nick: true } }),
+      prisma.gameOkres.findMany({ where: { key: { in: [...klice] } } }),
+    ]);
+    const drzi = new Map(uzemi.map((t) => [t.okres_key, t.master_nick]));
+    const st = stavu(me);
+    const out = [];
+    for (const o of okresy) {
+      const pot = await UNIE.potencial(o.key);
+      // Pobočka v okrese: území si smíš vzít tam, kam dosáhneš servisem.
+      // Jinak by šlo skoupit půl republiky od stolu.
+      const mesta = await prisma.gameArea.findMany({ where: { okres_key: o.key },
+        select: { name: true, lat: true, lon: true } }).catch(() => []);
+      let pobocka = null;
+      for (const m of mesta) {
+        const p = pobockaVOkrese(st, m);
+        if (p) { pobocka = p; break; }
+      }
+      out.push({ okres_key: o.key, nazev: o.nazev, lat: o.lat, lon: o.lon,
+        hranice: Array.isArray(o.hranice) ? o.hranice : null,
+        drzi: drzi.get(o.key) || null,
+        licence: pot.licence, volnych: pot.volnych, mist: pot.mist, skore: pot.skore,
+        zavazek: pot.zavazek, obyvatel: pot.obyvatel || null, mest: pot.mest,
+        pobocka: pobocka ? String(pobocka.name || '') : null });
+    }
+    res.json({ ok: true, sousedi: out });
+  } catch (e) { next(e); }
+});
+
+// Pobočka v okrese. Pobočky žijí ve stavu hry jako jméno města a souřadnice,
+// takže se berou obě cesty: shodné jméno, nebo pobočka do osmi kilometrů od
+// města okresu. Sídlo je taky pobočka — je to první základna.
+function pobockaVOkrese(st, mesto) {
+  const pob = (Array.isArray(st && st.pobocky) ? st.pobocky.slice() : []);
+  if (st && st.sidlo) pob.push(st.sidlo);
+  const jmeno = String((mesto && mesto.name) || '').trim().toLowerCase();
+  const km = (a, b) => {
+    if (!a || !b || a.lat == null || b.lat == null) return Infinity;
+    const r = Math.PI / 180, R = 6371;
+    const dx = (b.lon - a.lon) * r * Math.cos((a.lat + b.lat) / 2 * r);
+    const dy = (b.lat - a.lat) * r;
+    return Math.sqrt(dx * dx + dy * dy) * R;
+  };
+  for (const b of pob) {
+    if (!b) continue;
+    if (jmeno && String(b.name || '').trim().toLowerCase() === jmeno) return b;
+    if (km(b, mesto) <= 8) return b;
+  }
+  return null;
+}
+
 // ─── Převzetí volného území ──────────────────────────────────────────────────
 router.post('/unie/uzemi/prevzit', requirePlayer, jenUnie, async (req, res, next) => {
   try {
@@ -178,6 +250,19 @@ router.post('/unie/uzemi/prevzit', requirePlayer, jenUnie, async (req, res, next
     if (!pot.mist) return res.status(404).json({ error: stx(req)('server.unie_uzemi_neexistuje') });
     const uz = await prisma.gameTerritory.findUnique({ where: { okres_key: area } });
     if (uz) return res.status(409).json({ error: stx(req)('server.unie_uzemi_uz_ma_mastera') });
+    // Území si smíš vzít tam, kam dosáhneš: kde už máš prádlomat, nebo kde
+    // máš pobočku či sídlo. Bez toho by šlo skoupit půl republiky od stolu
+    // a servis by v těch okresech neměl kdo dělat.
+    const mamStroje = await prisma.gameSpotClaim.count({
+      where: { player_id: me.id, model: { not: '' },
+        area_key: { in: await OKRESY.oblasti(area) } } }).catch(() => 0);
+    if (!mamStroje) {
+      const mesta = await prisma.gameArea.findMany({ where: { okres_key: area },
+        select: { name: true, lat: true, lon: true } }).catch(() => []);
+      const st = stavu(me);
+      const ma = mesta.some((m) => !!pobockaVOkrese(st, m));
+      if (!ma) return res.status(409).json({ error: stx(req)('server.unie_bez_pobocky') });
+    }
     const stroju = await UNIE.pocetVOkrese(area);
     const t = await prisma.gameTerritory.create({ data: {
       okres_key: area, master_id: me.id, master_nick: me.nick,

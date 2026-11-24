@@ -216,6 +216,74 @@ async function proKlice(klice) {
   return out;
 }
 
+// ─── Sousedé ─────────────────────────────────────────────────────────────────
+// S kým okres sousedí. Území se má dát rozšiřovat o kus vedle, a k tomu musí
+// hra vědět, co vedle je. Zjistí se to tak, že se kolem obrysu sáhne kousek
+// ven a zeptá se, který okres tam je — žádná tabulka sousedů v OSM není
+// a stahovat kvůli tomu hranice celé země by bylo dělo na vrabce.
+//
+// Je to drahé (dotaz na každý směr), takže se to dělá jednou za okres
+// a ukládá. Pauza mezi dotazy je kvůli tomu, že Nominatim je cizí služba
+// zdarma a bušit do ní nemáme čím ospravedlnit.
+const SMERU = 12;              // kolik směrů se zkusí
+const VEN_KM = 6;              // jak daleko za hranici se sáhne
+
+function tezisteObrysu(body) {
+  let la = 0, lo = 0;
+  body.forEach((b) => { la += b[0]; lo += b[1]; });
+  return [la / body.length, lo / body.length];
+}
+
+// Bod kousek za hranicí ve směru úhlu. Bere se nejvzdálenější bod obrysu
+// v tom směru a přidá se pár kilometrů — tím se spolehlivě vyjde ven
+// i u okresu, který je protáhlý.
+function bodVen(body, stred, uhel) {
+  const kosLat = Math.cos(stred[0] * Math.PI / 180) || 1;
+  let vSektoru = 0, vcelku = 0;
+  body.forEach((b) => {
+    const dy = b[0] - stred[0], dx = (b[1] - stred[1]) * kosLat;
+    const d = Math.hypot(dx, dy);
+    if (d > vcelku) vcelku = d;
+    const a = Math.atan2(dx, dy);
+    let rozdil = Math.abs(a - uhel);
+    if (rozdil > Math.PI) rozdil = 2 * Math.PI - rozdil;
+    if (rozdil <= Math.PI / SMERU && d > vSektoru) vSektoru = d;
+  });
+  // V tom směru nemusí žádný bod obrysu ležet (špička, zub). Pak se jde na
+  // celkový dosah obrysu — ven se musí vyjít vždycky, jinak by se ten směr
+  // tiše přeskočil a soused by se nenašel.
+  const nej = vSektoru || vcelku;
+  if (!nej) return null;
+  const d = nej + VEN_KM / 111;
+  return [stred[0] + Math.cos(uhel) * d, stred[1] + Math.sin(uhel) * d / kosLat];
+}
+
+async function sousedi(key) {
+  const o = await prisma.gameOkres.findUnique({ where: { key } }).catch(() => null);
+  if (!o) return [];
+  if (Array.isArray(o.sousedi) && o.sousedi.length) return o.sousedi;
+  const body = Array.isArray(o.hranice) ? o.hranice : null;
+  if (!body || body.length < 4) return [];
+  const stred = tezisteObrysu(body);
+  const nalezeni = new Map();
+  for (let i = 0; i < SMERU; i++) {
+    const p = bodVen(body, stred, (i / SMERU) * 2 * Math.PI);
+    if (!p) continue;
+    const n = await najdiOkres(p[0], p[1]).catch(() => null);
+    if (n && n.key && n.key !== key && !nalezeni.has(n.key)) {
+      nalezeni.set(n.key, n);
+      // Soused se rovnou uloží i s obrysem — hráč si ho za chvíli otevře
+      // a nemá na něj čekat podruhé.
+      await zajisti(n.key, n.nazev, n.zeme, n).catch(() => {});
+    }
+    await new Promise((r) => setTimeout(r, 1100));
+  }
+  const klice = [...nalezeni.keys()];
+  await prisma.gameOkres.update({ where: { key }, data: { sousedi: klice } }).catch(() => {});
+  console.log('[game] okres', key, '— sousedé:', klice.join(', ') || '(žádní)');
+  return klice;
+}
+
 // Převod území z doby, kdy se vázalo na město. Řádek, jehož klíč sedí na
 // město, se přepíše na okres toho města — jinak by území nenašlo ani jeden
 // zábor a tvářilo se jako prázdné. Když je ten okres už zabraný někým jiným,
@@ -249,4 +317,4 @@ async function prevedStaraUzemi() {
 
 module.exports = { klic, zjednodus, prstenec, pocetObyvatel, lookup,
   najdiOkres, najdiHranici, proOblast, zajisti, oblasti, proKlice,
-  prevedStaraUzemi, BODU_MAX };
+  prevedStaraUzemi, sousedi, tezisteObrysu, bodVen, BODU_MAX };
