@@ -42,6 +42,11 @@ const VYCHOZI = {
   poplatek_min: 50,          // pásmo poplatku v procentech základu
   poplatek_max: 150,
   odvod_pct: 30,             // kolik % servisu opustí výrobu a jde hráčům
+  // Operátor je zatím vypnutý. Byla to třetí role, druhá licence a další
+  // dělení peněz — a přitom to, co dělal (shánět místa a nabízet je na
+  // Market place), zvládne master sám. Pravidla zůstala celá, takže se
+  // zapínají zpátky jedním číslem v nastavení.
+  operator_zapnut: 0,        // 1 = operátorské licence se smí vypisovat a kupovat
   operator_pct: 60,          // z odvodu operátorovi, zbytek masterovi
   licence_za_misto: 1200,    // licence za herní měsíc = volná místa × tohle × skóre/100
   // Okres je víc než jedno město a nemá stát stejně. Volná místa znají jen tu
@@ -85,10 +90,14 @@ async function pocetStroju(playerId) {
 
 async function role(playerId) {
   const [n, nast] = await Promise.all([pocetStroju(playerId), nastaveni()]);
+  // S vypnutým operátorem není operátorem nikdo — ani ten, kdo má strojů
+  // dost. Role se tím nepočítá jinak, prostě není.
+  const zapnut = !!Number(nast.operator_zapnut);
   return {
     pradlomatu: n,
     master: n >= nast.master_min,
-    operator: n >= nast.operator_min,
+    operator: zapnut && n >= nast.operator_min,
+    operator_zapnut: zapnut,
     master_min: nast.master_min,
     operator_min: nast.operator_min,
   };
@@ -220,7 +229,11 @@ async function vyuctujUzemi(t, nastIn) {
     }) : [],
     prisma.gameOperatorLicence.findMany({ where: { okres_key: t.okres_key, zrusena: false } }),
   ]);
-  const operator = licence.find((l) => !l.do_kdy || new Date(l.do_kdy).getTime() > Date.now()) || null;
+  // S vypnutým operátorem se běžící licence ignorují a celý odvod je
+  // masterův. Peníze za ně se vracejí jednorázově, viz zrusOperatory().
+  const operator = Number(nast.operator_zapnut)
+    ? (licence.find((l) => !l.do_kdy || new Date(l.do_kdy).getTime() > Date.now()) || null)
+    : null;
   const operatorPct = operator ? Math.max(0, Math.min(100, operator.podil_pct)) : 0;
 
   let proMastera = 0, proOperatora = 0;
@@ -331,7 +344,10 @@ async function uzemiPub(t, meId, nast) {
     kliceO.length ? prisma.gameArea.findMany({ where: { key: { in: kliceO } },
       select: { name: true, spots: true } }).catch(() => []) : [],
   ]);
-  const operatorPct = licence ? Math.max(0, Math.min(100, licence.podil_pct)) : 0;
+  // S vypnutým operátorem se licence ignoruje a celý odvod patří masterovi —
+  // stejně jako ve vyúčtování. Karta území pak nesmí lhát o tom, co nese.
+  const zapnut = !!Number(n.operator_zapnut);
+  const operatorPct = (zapnut && licence) ? Math.max(0, Math.min(100, licence.podil_pct)) : 0;
   let proMastera = 0, proOperatora = 0, odvedou = 0;
   vsechny.forEach((c) => {
     const r = odvodZMista(c, t, operatorPct, n.odvod_pct);
@@ -347,9 +363,10 @@ async function uzemiPub(t, meId, nast) {
     prijem_mesic: proMastera,
     operator_prijem: proOperatora,
     odvod_mesic: odvedou,
-    operator_nick: licence ? licence.nick : null,
-    operator_podil: licence ? licence.podil_pct : null,
-    operator_cena: t.operator_cena || null,
+    operator_zapnut: zapnut,
+    operator_nick: (zapnut && licence) ? licence.nick : null,
+    operator_podil: (zapnut && licence) ? licence.podil_pct : null,
+    operator_cena: zapnut ? (t.operator_cena || null) : null,
     okres_key: t.okres_key,
     master_id: t.master_id,
     master_nick: t.master_nick,
@@ -423,7 +440,59 @@ async function zebricekUzemi() {
   return vse.sort((a, b) => b.prijem - a.prijem || b.stroju - a.stroju);
 }
 
-module.exports = {
+// ─── Vypnutí operátora ───────────────────────────────────────────────────────
+// Když se operátor vypne, běžící licence doběhnout nemůžou: hra by měla dva
+// různé stavy pravidel podle toho, kdo si kdy co koupil. Zruší se proto
+// všechny — a protože je to NAŠE změna pravidel, ne hráčova, prodej se vrátí
+// zpátky: operátorovi se vrátí, co zaplatil, masterovi se to strhne.
+//
+// Běží to jednou za start a jen s vypnutým operátorem. Území se před zrušením
+// vyúčtuje, aby se o rozjetý měsíc nikdo nepřipravil.
+let ZRUSENO = false;
+async function zrusOperatory() {
+  if (ZRUSENO) return 0;
+  const nast = await nastaveni();
+  if (Number(nast.operator_zapnut)) return 0;
+  ZRUSENO = true;
+  const bezi = await prisma.gameOperatorLicence.findMany({ where: { zrusena: false } }).catch(() => []);
+  if (!bezi.length) return 0;
+  let kolik = 0;
+  for (const l of bezi) {
+    const t = await prisma.gameTerritory.findUnique({ where: { okres_key: l.okres_key } }).catch(() => null);
+    // Vyúčtovat se musí DŘÍV, než se licence zruší — jinak by operátor přišel
+    // o podíl za měsíce, které už odpracoval.
+    if (t) await vyuctujUzemi(t, nast).catch(() => null);
+    await prisma.gameOperatorLicence.update({ where: { id: l.id },
+      data: { zrusena: true, do_kdy: new Date() } }).catch(() => {});
+    const cena = Math.max(0, Math.round(l.cena || 0));
+    if (cena > 0) {
+      await prisma.gameDelivery.create({ data: { player_id: l.player_id, kind: 'cash',
+        amount: cena, spot_id: 'unie:lic-vrat:' + l.id,
+        text_kod: 'dor.unie_operator_zrusen', text_data: { p1: l.okres_key, penize: cena },
+        popis: 'Operátorská licence v území ' + l.okres_key + ' zrušena — peníze zpátky' } }).catch(() => {});
+      if (t && t.master_id) {
+        await prisma.gameDelivery.create({ data: { player_id: t.master_id, kind: 'cash',
+          amount: -cena, spot_id: 'unie:lic-vrat-m:' + l.id,
+          text_kod: 'dor.unie_operator_vracen', text_data: { p1: l.okres_key, p2: l.nick, penize: cena },
+          popis: 'Vrácena operátorská licence v území ' + l.okres_key } }).catch(() => {});
+      }
+    }
+    kolik++;
+  }
+  console.log('[game] unie — operátor vypnut, zrušeno licencí:', kolik);
+  return kolik;
+}
+// Na čtecí cestě se na to nečeká: sahá to na všechna území a běží to stejně
+// jen jednou.
+function zrusOperatoryNaPozadi() {
+  if (ZRUSENO) return false;
+  Promise.resolve().then(zrusOperatory).catch((e) => {
+    console.warn('[game] unie — rušení operátorů selhalo:', e && e.message);
+  });
+  return true;
+}
+
+module.exports = { zrusOperatory, zrusOperatoryNaPozadi,
   KEY, MESIC_MS, ROK_MS, VYCHOZI,
   nastaveni, ulozNastaveni, role, pocetStroju, potencial,
   nespokojenostZ, duvodVyzvy, servisMista, rozpad, odvodZMista, pocetVOkrese,

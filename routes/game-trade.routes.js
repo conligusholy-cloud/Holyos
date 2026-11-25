@@ -3485,6 +3485,13 @@ router.post('/trade/akcie/:id/obchod', hrac, api(async (req, res) => {
   res.json({ ok: true, pocet: r.pocet, cena: r.cena, castka: r.castka, cena_po: r.cena_po });
 }));
 
+// Je operátorská role zapnutá? Zatím ne: nabízet na Market place smí jen
+// master území. Pravidla operátora zůstala za vypínačem v nastavení Unie.
+async function unieOperatorZapnut() {
+  const UNIE = require('../services/game/unie');
+  return !!Number((await UNIE.nastaveni()).operator_zapnut);
+}
+
 // ─── Burza: kniha příkazů mezi hráči ─────────────────────────────────────────
 // Fond akcie jednou upíše a tím pro něj obchod končí. Dál si je hráči
 // předávají mezi sebou: kdo chce prodat, položí nabídku, kdo chce koupit,
@@ -4164,7 +4171,9 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
     const oblast = await prisma.gameArea.findUnique({ where: { key: c.area_key } }).catch(() => null);
     const okres = oblast ? await OKRESY.proOblastTed(oblast).catch(() => null) : null;
     const uzemi = okres ? await prisma.gameTerritory.findUnique({ where: { okres_key: okres.key } }).catch(() => null) : null;
-    const licence = okres ? await prisma.gameOperatorLicence.findFirst({
+    // Operátor je zatím vypnutý — nabízet smí jen master území. Až se zapne,
+    // vrátí se i jeho licence jako druhá cesta.
+    const licence = (okres && await unieOperatorZapnut()) ? await prisma.gameOperatorLicence.findFirst({
       where: { okres_key: okres.key, player_id: req.player.id, zrusena: false } }).catch(() => null) : null;
     if (!(uzemi && uzemi.master_id === req.player.id) && !licence) {
       return res.status(409).json({ error: stx(req)('server.market_jen_master') });
@@ -4182,7 +4191,9 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
     const oblast = await prisma.gameArea.findUnique({ where: { key: c.area_key } }).catch(() => null);
     const okres = oblast ? await OKRESY.proOblastTed(oblast).catch(() => null) : null;
     const uzemi = okres ? await prisma.gameTerritory.findUnique({ where: { okres_key: okres.key } }).catch(() => null) : null;
-    const licence = okres ? await prisma.gameOperatorLicence.findFirst({
+    // Operátor je zatím vypnutý — nabízet smí jen master území. Až se zapne,
+    // vrátí se i jeho licence jako druhá cesta.
+    const licence = (okres && await unieOperatorZapnut()) ? await prisma.gameOperatorLicence.findFirst({
       where: { okres_key: okres.key, player_id: req.player.id, zrusena: false } }).catch(() => null) : null;
     const jsemMaster = !!(uzemi && uzemi.master_id === req.player.id);
     if (!jsemMaster && !licence) {

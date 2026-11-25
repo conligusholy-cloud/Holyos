@@ -198,10 +198,10 @@ if (n) {
 // v chodu a vydělává od první minuty; v ceně má nový stroj za ceník a ten
 // přijde masterovi na sklad. Pro hru je to táž výměna jako „až dojde nový,
 // stroje se prohodí", jen bez čekání a bez evidence, co se může zaseknout.
-ok('zápůjčku smí vypsat jen master nebo operátor',
+ok('zápůjčku smí vypsat jen master území',
   /const seStrojem = !!c\.model && String\(b\.druh \|\| ''\) === 'se_strojem';/.test(R)
-  && /if \(seStrojem\) \{[\s\S]{0,900}server\.market_jen_master/.test(R));
-ok('a jen s pobočkou v lokalitě', /if \(seStrojem\) \{[\s\S]{0,1200}server\.market_bez_pobocky/.test(R));
+  && /if \(seStrojem\) \{[\s\S]{0,1400}server\.market_jen_master/.test(R));
+ok('a jen s pobočkou v lokalitě', /if \(seStrojem\) \{[\s\S]{0,1700}server\.market_bez_pobocky/.test(R));
 ok('v ceně je stroj z ceníku',
   /const strojCena = seStrojem \? Math\.max\(0, Math\.round\(JMENI\.CENY_STROJU\[m\.model\]/.test(R));
 ok('kupující platí místo i stroj', /const celkem = Math\.max\(0, Math\.round\(m\.cena \+ strojCena\)\);/.test(R)

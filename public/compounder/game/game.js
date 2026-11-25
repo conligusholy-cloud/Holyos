@@ -8068,7 +8068,7 @@ function unieUzemiKarta(u, nast) {
   if (!u.moje) {
     // Nabídnutá operátorská licence. Master ji vypíše, ale přijmout ji dosud
     // nebylo kde — visela v cizí kartě jako údaj, ne jako nabídka.
-    var lic = (u.operator_cena && !u.operator_nick)
+    var lic = (u.operator_zapnut && u.operator_cena && !u.operator_nick)
       ? '<div class="kv"><span>' + esc(tx('hra.unie_operator')) + '</span><b>'
         + esc(tx('veta.unie_nabidnuta_za', { p1: kcFull(u.operator_cena) })) + '</b></div>'
         + '<p class="fine">' + esc(tx('unie.operator_co_to_je', { p1: u.operator_podil || 60 })) + '</p>'
@@ -8078,7 +8078,7 @@ function unieUzemiKarta(u, nast) {
             + esc(tx('unie.operator_koupit')) + '</button>'
           : '<p class="fine err">' + esc(tx('unie.operator_od', {
               p1: cislo1((UNIE && UNIE.role && UNIE.role.operator_min) || 10) })) + '</p>')
-      : (u.operator_nick
+      : ((u.operator_zapnut && u.operator_nick)
         ? '<div class="kv"><span>' + esc(tx('hra.unie_operator')) + '</span><b>'
           + esc(u.operator_nick) + ' (' + u.operator_podil + ' %)</b></div>'
         : '');
@@ -8098,9 +8098,12 @@ function unieUzemiKarta(u, nast) {
     + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.unie_nese_mesicne')) + '</span><b class="' + (u.prijem_mesic ? 'ok' : 'muted') + '">'
     + kcFull(u.prijem_mesic || 0) + '</b></div>'
-    + '<div class="kv"><span>' + esc(tx('hra.unie_operator')) + '</span><b>'
-    + (u.operator_nick ? esc(u.operator_nick) + ' (' + u.operator_podil + ' %)'
-      : (u.operator_cena ? esc(tx('veta.unie_nabidnuta_za', { p1: kcFull(u.operator_cena) })) : '—')) + '</b></div>'
+    + (u.operator_zapnut
+      ? '<div class="kv"><span>' + esc(tx('hra.unie_operator')) + '</span><b>'
+        + (u.operator_nick ? esc(u.operator_nick) + ' (' + u.operator_podil + ' %)'
+          : (u.operator_cena ? esc(tx('veta.unie_nabidnuta_za', { p1: kcFull(u.operator_cena) })) : '—'))
+        + '</b></div>'
+      : '')
     + unieCoDal(u)
     + unieMistaHtml(u)
     + '<label class="fine">' + esc(tx('hra.unie_poplatek')) + ': <b data-pct-pro="' + esc(u.okres_key) + '">' + u.poplatek_pct + ' %</b></label>'
@@ -8115,7 +8118,12 @@ function unieUzemiKarta(u, nast) {
     + '<div class="gcard-act">'
     + '<button class="btn sec sm" data-unie-licence="' + esc(u.okres_key) + '" data-cena="' + u.licence + '">'
     + esc(tx('hra.unie_doplatit_licenci')) + '</button>'
-    + '<button class="btn sec sm" data-unie-vypsat="' + esc(u.okres_key) + '">' + esc(tx('hra.unie_vypsat_licenci')) + '</button>'
+    // Operátorskou licenci jde vypsat, jen když je operátor zapnutý. Zatím
+    // není: byla to třetí role a další dělení peněz a master to zvládne sám.
+    + (u.operator_zapnut
+      ? '<button class="btn sec sm" data-unie-vypsat="' + esc(u.okres_key) + '">'
+        + esc(tx('hra.unie_vypsat_licenci')) + '</button>'
+      : '')
     + '</div>' + vyzva + '</div>';
 }
 // Moje místa v území: co na nich je hotové a co se dá nabídnout dál. Je to
@@ -8198,7 +8206,8 @@ function unieCoDal(u) {
   var rada;
   if (!u.stroju) rada = tx('hra.unie_rada_prazdno');
   else if (!u.cizich) rada = tx('hra.unie_rada_nikdo');
-  else if (!u.operator_nick && !u.operator_cena) rada = tx('hra.unie_rada_operator');
+  // Rada „sežeň si operátora" dává smysl, jen když operátor existuje.
+  else if (u.operator_zapnut && !u.operator_nick && !u.operator_cena) rada = tx('hra.unie_rada_operator');
   else if (u.zavazek_pridano < u.zavazek) rada = tx('veta.unie_rada_zavazek', { p1: cislo1(u.zavazek - u.zavazek_pridano) });
   else if (u.nespokojenost >= u.vyzva_prah) rada = tx('hra.unie_rada_nespokojenost');
   else rada = tx('hra.unie_rada_rust');

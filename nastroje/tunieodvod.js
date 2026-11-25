@@ -84,5 +84,43 @@ ok('rada už neslibuje, že nízký poplatek přiláká hráče',
 ok('a rada o růstu nelže o vlastních strojích',
   /vlastní i cizí odvádějí stejně/.test(KAT['hra.unie_rada_rust'] || ''));
 
+// ─── Vypnutý operátor ────────────────────────────────────────────────────────
+// Operátor je zatím vypnutý: byla to třetí role, druhá licence a další dělení
+// peněz. Pravidla zůstala za vypínačem, ale dokud je vypnutý, nesmí z hry
+// koukat nikde — a hlavně nesmí masterovi ukrajovat z odvodu.
+ok('ve výchozím nastavení je operátor vypnutý', Number(U.VYCHOZI.operator_zapnut) === 0);
+ok('a jeho podíl zůstal v pravidlech', Number(U.VYCHOZI.operator_pct) === 60);
+// Vyúčtování i karta území se musí ptát na vypínač, ne jen na licenci.
+ok('vyúčtování se ptá na vypínač',
+  /const operator = Number\(nast\.operator_zapnut\)/.test(Z));
+ok('karta území taky', /const zapnut = !!Number\(n\.operator_zapnut\);/.test(Z)
+  && /const operatorPct = \(zapnut && licence\)/.test(Z));
+ok('a role operátora se bez vypínače nepřidělí',
+  /operator: zapnut && n >= nast\.operator_min/.test(Z));
+// Běžící licence se zruší a peníze se vrátí — je to naše změna pravidel.
+ok('běžící licence se jednou zruší', /async function zrusOperatory\(\)/.test(Z)
+  && /if \(Number\(nast\.operator_zapnut\)\) return 0;/.test(Z));
+ok('operátorovi se vrátí, co zaplatil', /amount: cena, spot_id: 'unie:lic-vrat:'/.test(Z));
+ok('a masterovi se to strhne', /amount: -cena, spot_id: 'unie:lic-vrat-m:'/.test(Z));
+ok('území se před zrušením vyúčtuje',
+  /if \(t\) await vyuctujUzemi\(t, nast\)[\s\S]{0,200}zrusena: true/.test(Z));
+
+const RU = cti('routes/game-unie.routes.js');
+ok('vypsat ani koupit licenci nejde', (RU.match(/server\.unie_operator_vypnuty/g) || []).length >= 2);
+ok('a do hry se žádné licence neposílají',
+  /Number\(nast\.operator_zapnut\) \? licence : \[\]/.test(RU));
+const RT = cti('routes/game-trade.routes.js');
+ok('na Market place nabízí jen master — u místa i u provozovny',
+  (RT.match(/await unieOperatorZapnut\(\)\) \? await prisma\.gameOperatorLicence/g) || []).length === 2);
+ok('karta území operátora neukazuje',
+  /\+ \(u\.operator_zapnut\s*\n\s*\? '<div class="kv"><span>' \+ esc\(tx\('hra\.unie_operator'\)\)/.test(hra));
+ok('ani tlačítko na vypsání licence',
+  /\(u\.operator_zapnut\s*\n\s*\? '<button class="btn sec sm" data-unie-vypsat/.test(hra));
+ok('a v cizí kartě se nenabízí ke koupi',
+  /var lic = \(u\.operator_zapnut && u\.operator_cena && !u\.operator_nick\)/.test(hra));
+ok('a rada ho nenabízí', /u\.operator_zapnut && !u\.operator_nick && !u\.operator_cena/.test(hra));
+ok('v administraci jde vypínač přepnout',
+  /\['operator_zapnut', /.test(cti('modules/milionar/index.html')));
+
 console.log(chyb ? '\n' + chyb + ' nesedí' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

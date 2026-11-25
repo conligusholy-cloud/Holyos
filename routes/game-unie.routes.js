@@ -49,6 +49,8 @@ router.get('/unie/prehled', requirePlayer, jenUnie, async (req, res, next) => {
     // Území z doby, kdy se vázala na město, se převedou na okres. Běží to na
     // pozadí: převod sahá na cizí službu a přehled na ni čekat nesmí.
     OKRESY.prevodNaPozadi();
+    // Operátor je vypnutý: běžící licence se jednou zruší a peníze se vrátí.
+    UNIE.zrusOperatoryNaPozadi();
     const nast = await UNIE.nastaveni();
     const moje_role = await UNIE.role(me.id);
 
@@ -130,7 +132,9 @@ router.get('/unie/prehled', requirePlayer, jenUnie, async (req, res, next) => {
       poplatek_min: nast.poplatek_min, poplatek_max: nast.poplatek_max,
       vyzva_prah: nast.vyzva_prah, vyzva_mesicu: nast.vyzva_mesicu,
       vyzva_priplatek_pct: nast.vyzva_priplatek_pct, odvod_pct: nast.odvod_pct,
-    }, uzemi: pub, volne, licence: licence.map((l) => {
+      // S vypnutým operátorem se licence do hry neposílají vůbec — běžící
+      // se jednorázově ruší a nové koupit nejdou.
+    }, uzemi: pub, volne, licence: (Number(nast.operator_zapnut) ? licence : []).map((l) => {
       // Co licence operátorovi nese, spočítalo už uzemiPub toho území.
       const u = pub.filter((x) => x.okres_key === l.okres_key)[0] || {};
       return { okres_key: l.okres_key, nazev: u.nazev || l.okres_key, cena: l.cena,
@@ -386,8 +390,19 @@ router.post('/unie/uzemi/dorovnat', requirePlayer, jenUnie, async (req, res, nex
 // ─── Operátorské licence ─────────────────────────────────────────────────────
 // Master vypíše, za kolik licenci v území prodává a jaký podíl ze servisu
 // k ní patří. Operátor si ji koupí; v jednom území je v jednu chvíli jeden.
+//
+// ZATÍM VYPNUTO. Byla to třetí role, druhá licence a další dělení peněz —
+// a přitom to, co operátor dělal, zvládne master sám. Pravidla tu zůstala
+// celá za vypínačem (operator_zapnut v nastavení Unie), takže se to zapne
+// zpátky jedním číslem, až bude po čem sáhnout.
+async function operatorZapnut() {
+  return !!Number((await UNIE.nastaveni()).operator_zapnut);
+}
 router.post('/unie/licence/vypsat', requirePlayer, jenUnie, async (req, res, next) => {
   try {
+    if (!(await operatorZapnut())) {
+      return res.status(409).json({ error: stx(req)('server.unie_operator_vypnuty') });
+    }
     const b = req.body || {};
     const area = s(b.okres_key || b.area_key, 80);
     const cena = Math.max(0, Math.round(Number(b.cena) || 0));
@@ -402,6 +417,9 @@ router.post('/unie/licence/vypsat', requirePlayer, jenUnie, async (req, res, nex
 
 router.post('/unie/licence/koupit', requirePlayer, jenUnie, async (req, res, next) => {
   try {
+    if (!(await operatorZapnut())) {
+      return res.status(409).json({ error: stx(req)('server.unie_operator_vypnuty') });
+    }
     const me = req.player;
     const area = s((req.body || {}).okres_key || (req.body || {}).area_key, 80);
     const r = await UNIE.role(me.id);
