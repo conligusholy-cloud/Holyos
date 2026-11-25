@@ -8542,6 +8542,31 @@ model GameAkcieObchod {
   @@map("game_akcie_obchod")
 }
 
+// Kniha příkazů na burze. Fond akcie jednou upíše a tím pro něj obchod
+// končí — dál si je hráči předávají mezi sebou za cenu, na které se potkají.
+// Příkaz je limitní a leží v knize, dokud ho někdo nevezme nebo dokud ho
+// jeho autor nezruší.
+model GameAkciePrikaz {
+  id           Int      @id @default(autoincrement())
+  aliance_id   Int
+  player_id    Int
+  // koupit | prodat
+  smer         String   @db.VarChar(8)
+  // Zbytek k vyřízení. Původní počet zůstává vedle, ať je částečně splněný
+  // příkaz poznat od celého.
+  pocet        Int
+  pocet_pvodni Int
+  cena         Int
+  // bezi | splneno | zruseno
+  stav         String   @default("bezi") @db.VarChar(10)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+
+  @@index([aliance_id, stav, smer, cena, created_at], map: "game_akcie_prikaz_kniha")
+  @@index([player_id, stav], map: "game_akcie_prikaz_hrac")
+  @@map("game_akcie_prikaz")
+}
+
 // Řada cen akcie. Graf se kreslí odsud, ne z obchodů: cena se hýbe i tehdy,
 // když se s akciemi vůbec neobchoduje — stačí, aby se pohnula hodnota fondu.
 // Důvod se ukládá s ní, ať je poznat obchod od přecenění.

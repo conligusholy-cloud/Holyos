@@ -7,6 +7,7 @@ const Module = require('module');
 const puvodni = Module.prototype.require;
 let NABIDKY = [];
 let PODILY = [];
+let PRIKAZY = [];
 let PRISMA = null;
 Module.prototype.require = function (co) {
   if (/config\/database$/.test(co)) {
@@ -15,6 +16,11 @@ Module.prototype.require = function (co) {
         t.utocnik_id === q.where.utocnik_id && t.stav === q.where.stav && t.trvala === q.where.trvala) },
       gameEquity: { findMany: async (q) => PODILY.filter((e) =>
         e.firma_id === q.where.firma_id && e.stav === q.where.stav) },
+      // Nákupní příkaz v knize na burze je slib zaplatit, stejně jako nabídka
+      // na převzetí. Prodejní se nerezervuje — ten neslibuje peníze, ale kusy.
+      gameAkciePrikaz: { findMany: async (q) => PRIKAZY.filter((p) =>
+        p.player_id === q.where.player_id && p.stav === q.where.stav
+        && p.smer === q.where.smer) },
     };
     return { prisma: PRISMA };
   }
@@ -36,7 +42,7 @@ const nabidka = (x) => Object.assign({ utocnik_id: 1, stav: 'bezi', trvala: fals
   max_pct: 0.3, koupeno_pct: 0, cena_za_pct: 10000, do: ZITRA }, x || {});
 
 (async () => {
-  NABIDKY = []; PODILY = [];
+  NABIDKY = []; PODILY = []; PRIKAZY = [];
   let v = await REZ.volne(HRAC, { cash: 1000000 });
   ok('bez nabídek je volné všechno', v.volne === 1000000 && v.zamceno === 0);
 
@@ -113,6 +119,24 @@ const nabidka = (x) => Object.assign({ utocnik_id: 1, stav: 'bezi', trvala: fals
     (await REZ.volne(HRAC, { cash: 10 })).zamceno === 0);
 
   PODILY = [];
+
+  // Kniha příkazů na burze. Nákupní příkaz je slib: kdokoli mi do něj může
+  // prodat a já musím zaplatit. Bez rezervace by hráč jedněmi penězi podložil
+  // deset příkazů a devíti lidem by pak server řekl, že se to nepovedlo.
+  PRIKAZY = [{ player_id: 1, stav: 'bezi', smer: 'koupit', pocet: 10, cena: 20000 }];
+  v = await REZ.volne(HRAC, { cash: 1000000 });
+  ok('nákupní příkaz drží, co slíbil',
+    v.zamceno === 200000 && v.volne === 800000, '— ' + v.zamceno);
+  PRIKAZY = [{ player_id: 1, stav: 'bezi', smer: 'koupit', pocet: 10, cena: 20000 },
+    { player_id: 1, stav: 'bezi', smer: 'koupit', pocet: 5, cena: 30000 }];
+  ok('víc příkazů se sčítá',
+    (await REZ.volne(HRAC, { cash: 1000000 })).zamceno === 350000);
+  // Prodejní příkaz neslibuje peníze, ale kusy — ten hotovost držet nesmí.
+  PRIKAZY = [{ player_id: 1, stav: 'bezi', smer: 'prodat', pocet: 10, cena: 20000 }];
+  ok('prodejní příkaz hotovost nedrží',
+    (await REZ.volne(HRAC, { cash: 1000000 })).zamceno === 0);
+  PRIKAZY = [];
+
   ok('prázdný stav nic neshodí', (await REZ.volne(HRAC, null)).volne === 0);
 
   console.log(chyb ? '\n' + chyb + ' nesedí' : '\nvšechno sedí');

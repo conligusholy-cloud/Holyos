@@ -33,26 +33,30 @@ function zbyvaZNabidky(t) {
 // běží, nemá si její majitel brát další závazky.
 async function zamceno(playerId) {
   const ted = new Date();
-  const [rows, dluhy] = await Promise.all([
+  const [rows, dluhy, prikazy] = await Promise.all([
     prisma.gameTender.findMany({
       where: { utocnik_id: playerId, stav: 'bezi', trvala: false },
     }).catch(() => []),
     prisma.gameEquity.findMany({
       where: { firma_id: playerId, stav: 'bezi' }, select: { nedoplatek: true },
     }).catch(() => []),
-    // Nákupní nabídka v pořadníku akcií je stejný slib jako nabídka na
-    // převzetí: kdokoli mi do ní může prodat a já musím zaplatit. Bez téhle
-    // položky by hráč jedněmi penězi podložil deset nabídek a devíti lidem
+    // Nákupní příkaz v knize na burze je stejný slib jako nabídka na
+    // převzetí: kdokoli mi do něj může prodat a já musím zaplatit. Bez téhle
+    // položky by hráč jedněmi penězi podložil deset příkazů a devíti lidem
     // by pak server řekl, že se to nepovedlo.
-
+    prisma.gameAkciePrikaz.findMany({
+      where: { player_id: playerId, stav: 'bezi', smer: 'koupit' },
+      select: { smer: true, pocet: true, cena: true },
+    }).catch(() => []),
   ]);
   const zNabidek = rows
     .filter((t) => !t.do || new Date(t.do) > ted)
     .reduce((a, t) => a + zbyvaZNabidky(t), 0);
   const zDividend = dluhy.reduce((a, x) => a + Math.max(0, Number(x.nedoplatek) || 0), 0);
-  // Akcie se nerezervují: kupuje se za cenu, která platí teď, a obchod
-  // proběhne hned. Nic neleží a neslibuje se nic na později.
-  return Math.round(zNabidek + zDividend);
+  // Co leží pod nákupními příkazy na burze. Úpis od fondu se nerezervuje:
+  // ten proběhne hned a nic po něm neleží.
+  const zPrikazu = require('./akcie-kniha').zamcenePenize(prikazy);
+  return Math.round(zNabidek + zDividend + zPrikazu);
 }
 
 // Volná hotovost = co hra ukazuje, minus zamčené. Bere se číslo hry, ne

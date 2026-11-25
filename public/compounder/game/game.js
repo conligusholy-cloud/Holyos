@@ -12436,24 +12436,69 @@ function akcieBurzaSheet() {
   $('ab-zavrit').onclick = function () { AKCIE_KAM = null; closeSheet(); };
 }
 
-// Trh jednoho fondu. Políčko je jen jedno — kolik kusů. Cena se nezadává,
-// protože si ji kupující určovat nemá.
+// Stav burzy jednoho fondu: kniha příkazů, moje příkazy a meze pásma. Chodí
+// zvlášť od ceny a grafu, protože se mění nejčastěji ze všeho.
+var AKCIE_BURZA = null;
+function loadAkcieBurza(id, then) {
+  api('/trade/akcie/' + id + '/trh', { method: 'GET' }).then(function (r) {
+    AKCIE_BURZA = (r.ok && r.j.trh) || null;
+    if (then) then();
+  }).catch(function () { AKCIE_BURZA = null; if (then) then(); });
+}
+// Hloubka knihy. Nahoře nabídky (kdo prodává) od nejlevnější, dole poptávky
+// (kdo kupuje) od nejdražší — uprostřed je rozpětí, ve kterém se trh potkává.
+function akcieHloubkaHtml(b) {
+  var radek = function (x, trida) {
+    return '<div class="row"><span class="muted small">' + tCislo(x.pocet) + ' ×</span>'
+      + '<span class="' + trida + '">' + kcFull(x.cena) + '</span></div>';
+  };
+  var nab = b.nabidka || [];
+  var pop = b.poptavka || [];
+  if (!nab.length && !pop.length) {
+    return '<p class="fine">' + esc(tx('akcie.kniha_prazdna')) + '</p>';
+  }
+  return '<div class="row"><span class="muted small">' + esc(tx('akcie.nabidka')) + '</span>'
+    + '<span class="muted small">' + esc(tx('akcie.za_kus')) + '</span></div>'
+    + (nab.length ? nab.map(function (x) { return radek(x, 'err'); }).join('')
+        : '<p class="fine">' + esc(tx('akcie.nabidka_zadna')) + '</p>')
+    + '<div class="row" style="margin-top:6px"><span class="muted small">'
+    + esc(tx('akcie.poptavka')) + '</span></div>'
+    + (pop.length ? pop.map(function (x) { return radek(x, 'ok'); }).join('')
+        : '<p class="fine">' + esc(tx('akcie.poptavka_zadna')) + '</p>');
+}
+// Moje příkazy v knize. Zrušit se dá kdykoli, dokud do nich nikdo neprodá.
+function akciePrikazyHtml(b) {
+  var l = b.prikazy || [];
+  if (!l.length) return '';
+  return '<h4 style="margin:12px 0 2px">' + esc(tx('akcie.moje_prikazy')) + '</h4>'
+    + l.map(function (p) {
+        return '<div class="row"><span>'
+          + '<b class="' + (p.smer === 'koupit' ? 'ok' : 'err') + '">'
+          + esc(tx(p.smer === 'koupit' ? 'akcie.koupit' : 'akcie.prodat')) + '</b> '
+          + tx('veta.akcie_prikaz_radek', { p1: p.pocet, p2: p.cena }) + '</span>'
+          + '<button class="btn sec sm" data-ak-zrus="' + p.id + '">'
+          + esc(tx('akcie.zrusit')) + '</button></div>';
+      }).join('');
+}
+
+// Trh jednoho fondu: úpis od fondu (dokud má co) a burza mezi hráči.
 //
-// Dvě podoby jedné obrazovky: se zadaným směrem je to rovnou obchod (jedno
-// tlačítko, nic navíc), bez něj podrobnosti — čísla fondu, poslední obchody
-// a obě tlačítka.
+// Dvě patra, a je důležité je nesplést. Při úpisu prodává fond za cenu, kterou
+// odhlasoval — stačí říct, kolik kusů. Na burze se zadává příkaz: kolik kusů
+// a za jakou cenu, a obchod se uzavře, až se najde protistrana. Fond akcie
+// zpátky nevykupuje.
+//
+// smer jen předvyplní směr v příkazu; obrazovka je pořád jedna.
 function akcieTrhSheet(id, smer) {
   if (!AKCIE_TRH || AKCIE_TRH.aliance_id !== id) {
     return loadAkcieTrh(id, function () { akcieTrhSheet(id, smer); });
   }
+  if (!AKCIE_BURZA || AKCIE_BURZA.aliance_id !== id) {
+    return loadAkcieBurza(id, function () { akcieTrhSheet(id, smer); });
+  }
   var a = AKCIE_TRH;
-  var jenSmer = smer === 'koupit' || smer === 'prodat';
-  var smerPo = function (kusu, s) {
-    // Stejný počet jako na serveru: posun o podíl obchodovaných kusů ze všech.
-    if (!(a.celkem > 0) || !(kusu > 0) || !(a.cena > 0)) return a.cena;
-    var hyb = Math.min(1, kusu / a.celkem);
-    return Math.max(1, Math.round(a.cena * (s === 'prodat' ? 1 - hyb : 1 + hyb)));
-  };
+  var b = AKCIE_BURZA;
+  var smerTed = smer === 'prodat' ? 'prodat' : 'koupit';
   // Poslední obchody chodí ze serveru zvlášť: graf je řada CEN a je v něm
   // i přecenění, u kterého žádný obchod nebyl.
   var posledni = (a.obchody || []);
@@ -12461,10 +12506,6 @@ function akcieTrhSheet(id, smer) {
     + '<div class="kv"><span>' + esc(tx('akcie.ucetni')) + '</span><b>' + kcFull(a.ucetni) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('akcie.vydano')) + '</span><b>' + tCislo(a.vydano)
     + ' · ' + procentaPodilu(a.podil) + esc(tx('akcie.fondu')) + '</b></div>'
-    + '<div class="kv"><span>' + esc(tx('akcie.fond_jeste_proda')) + '</span><b>'
-    + tCislo(a.volne) + '</b></div>'
-    + '<div class="kv"><span>' + esc(tx('akcie.fond_vykoupi')) + '</span><b>'
-    + tCislo(a.vykoupi) + '</b></div>'
     // Dividenda je to, co fond doopravdy vyhlásil a vyplatil. Dokud
     // nevyhlásí nic, je tu nula — a to je poctivá informace.
     + '<div class="kv"><span>' + esc(tx('akcie.dividenda_posledni')) + '</span><b class="'
@@ -12501,6 +12542,20 @@ function akcieTrhSheet(id, smer) {
                 + sipkaHtml(sm) + kcFull(o.cena) + '</span></div>';
             }).join('')
         : '');
+  // Úpis: dokud fond nerozprodal, co odhlasoval, dá se koupit rovnou od něj
+  // za pevnou cenu. Až dojde, zbude jen burza.
+  var upis = b.upis_zbyva > 0
+    ? '<h4 style="margin:14px 0 2px">' + esc(tx('akcie.upis')) + '</h4>'
+      + '<p class="fine">' + esc(tx('akcie.upis_popis')) + '</p>'
+      + '<div class="kv"><span>' + esc(tx('akcie.fond_jeste_proda')) + '</span><b>'
+      + tCislo(b.upis_zbyva) + '</b></div>'
+      + '<label class="fld"><span>' + esc(tx('akcie.kusu')) + '</span>'
+      + '<input id="ak-upis-pocet" class="inp" type="number" inputmode="numeric" min="1" step="1" value="1"></label>'
+      + '<div class="kv souhrn"><span>' + esc(tx('akcie.dohromady')) + '</span><b id="ak-upis-soucet">—</b></div>'
+      + '<button class="btn" id="ak-upsat" style="width:100%">'
+      + esc(tx('akcie.upsat')) + '</button>'
+    : '';
+
   sheet('<h3>' + tx('veta.akcie_fondu', { p1: esc(a.nazev) }) + '</h3>'
     + '<div class="kv souhrn"><span>' + esc(tx('akcie.cena_ted')) + '</span><b class="ok">'
     + kcFull(a.cena) + '</b></div>'
@@ -12512,53 +12567,69 @@ function akcieTrhSheet(id, smer) {
     + akcieVynosHtml(a)
     + '<div class="kv"><span>' + esc(tx('akcie.moje_kusy')) + '</span><b class="'
     + (a.moje_kusy ? 'ok' : '') + '">' + tCislo(a.moje_kusy) + '</b></div>'
+    + (b.zamcene_kusy
+        ? '<div class="kv"><span>' + esc(tx('akcie.zamcene_kusy')) + '</span><b>'
+          + tCislo(b.zamcene_kusy) + '</b></div>' : '')
     + akcieBalikHtml(a, true)
-    // I v obchodu musí být vidět strop toho směru: kolik fond ještě prodá,
-    // kolik vykoupí. Bez toho hráč zadá počet a dozví se to až z chybové hlášky.
-    + (jenSmer
-        ? '<div class="kv"><span>'
-          + esc(tx(smer === 'prodat' ? 'akcie.fond_vykoupi' : 'akcie.fond_jeste_proda'))
-          + '</span><b>' + tCislo(smer === 'prodat' ? a.vykoupi : a.volne) + '</b></div>'
-        : podrobnosti)
-    + '<h4 style="margin:14px 0 2px">' + esc(tx('akcie.kolik')) + '</h4>'
+    + upis
+    + '<h4 style="margin:16px 0 2px">' + esc(tx('akcie.kniha_prikazu')) + '</h4>'
+    + '<p class="fine">' + esc(tx('akcie.burza_rada')) + '</p>'
+    + akcieHloubkaHtml(b)
+    + akciePrikazyHtml(b)
+    + '<h4 style="margin:14px 0 2px">' + esc(tx('akcie.novy_prikaz')) + '</h4>'
+    + '<div class="gcard-act">'
+    + '<button class="btn' + (smerTed === 'koupit' ? '' : ' sec') + ' sm" id="ak-s-koupit">'
+    + esc(tx('akcie.koupit')) + '</button>'
+    + '<button class="btn' + (smerTed === 'prodat' ? '' : ' sec') + ' sm" id="ak-s-prodat">'
+    + esc(tx('akcie.prodat')) + '</button></div>'
     + '<label class="fld"><span>' + esc(tx('akcie.kusu')) + '</span>'
     + '<input id="ak-pocet" class="inp" type="number" inputmode="numeric" min="1" step="1" value="1"></label>'
+    + '<label class="fld"><span>' + esc(tx('akcie.cena_za_kus')) + '</span>'
+    + '<input id="ak-cena" class="inp" type="number" inputmode="numeric" min="1" step="1" value="'
+    + Math.max(1, Math.round(a.cena || 0)) + '"></label>'
+    + '<p class="fine">' + tx('veta.akcie_pasmo', { p1: b.mez.min, p2: b.mez.max,
+        p3: b.pasmo_pct }) + '</p>'
     + '<div class="kv souhrn"><span>' + esc(tx('akcie.dohromady')) + '</span><b id="ak-soucet">—</b></div>'
-    + '<p class="fine" id="ak-posun"></p>'
-    + '<p class="fine">' + esc(tx('akcie.rada')) + '</p>'
-    + '<div class="gcard-act">'
-    + (jenSmer
-        ? '<button class="btn' + (smer === 'prodat' ? ' sec' : '') + ' sm" id="ak-' + smer + '">'
-          + esc(tx(smer === 'prodat' ? 'akcie.prodat' : 'akcie.koupit')) + '</button>'
-        : '<button class="btn sm" id="ak-koupit">' + esc(tx('akcie.koupit')) + '</button>'
-          + '<button class="btn sec sm" id="ak-prodat">' + esc(tx('akcie.prodat')) + '</button>')
-    + '</div>'
-    + (jenSmer
-        ? '<button class="btn sec" id="ak-detail" style="width:100%;margin-top:8px">'
-          + esc(tx('akcie.podrobnosti')) + '</button>'
-        : '')
+    + '<p class="fine" id="ak-strop"></p>'
+    + '<button class="btn big" id="ak-zadat" style="width:100%">'
+    + esc(tx('akcie.zadat_prikaz')) + '</button>'
+    + podrobnosti
     + '<button class="btn sec" id="ak-zavrit" style="width:100%;margin-top:8px">'
     + esc(AKCIE_KAM ? tx('hra.zpet') : tx('hra.nechat_byt')) + '</button>');
 
-  var kusu = function () {
-    return Math.max(0, Math.floor(Number(($('ak-pocet') || {}).value) || 0));
+  var cislo = function (pole) {
+    return Math.max(0, Math.floor(Number(($(pole) || {}).value) || 0));
   };
+  var znovu = function () {
+    AKCIE_SEZNAM = null;
+    loadAkcieTrh(id, function () {
+      loadAkcieBurza(id, function () { akcieTrhSheet(id, smerTed); });
+    });
+  };
+  // Součet a strop: kolik to dohromady udělá a co mi na to zbývá. Hráč to
+  // musí vidět dřív, než klikne — ne až z chybové hlášky.
   var prepocti = function () {
-    var n = kusu();
-    $('ak-soucet').textContent = kcFull(n * a.cena);
-    // Kam se cena po obchodu posune. Hráč to musí vidět dřív, než klikne —
-    // u velkého balíku si ho sám prodraží a je slušné to říct předem.
-    var pole = $('ak-posun');
-    if (!pole) return;
-    pole.textContent = n > 0
-      ? tx('veta.akcie_posun', { p1: smerPo(n, 'koupit'), p2: smerPo(n, 'prodat') })
-      : '';
+    var n = cislo('ak-pocet');
+    var c = Math.max(0, Math.round(Number(($('ak-cena') || {}).value) || 0));
+    if ($('ak-soucet')) $('ak-soucet').textContent = kcFull(n * c);
+    var strop = $('ak-strop');
+    if (strop) {
+      strop.textContent = smerTed === 'koupit'
+        ? tx('veta.akcie_volna_hotovost', { p1: b.volna_hotovost })
+        : tx('veta.akcie_volne_kusy', { p1: b.volne_kusy });
+    }
   };
-  $('ak-pocet').oninput = prepocti; prepocti();
+  if ($('ak-pocet')) $('ak-pocet').oninput = prepocti;
+  if ($('ak-cena')) $('ak-cena').oninput = prepocti;
+  prepocti();
+  var prepni = function (s) {
+    return function () { akcieTrhSheet(id, s); };
+  };
+  if ($('ak-s-koupit')) $('ak-s-koupit').onclick = prepni('koupit');
+  if ($('ak-s-prodat')) $('ak-s-prodat').onclick = prepni('prodat');
   $('ak-zavrit').onclick = akcieZpet;
-  if ($('ak-detail')) $('ak-detail').onclick = function () { akcieTrhSheet(id); };
-  // Z knihy se vracíme sem, a kam odsud, to se schová a vrátí — jinak by se
-  // cesta zpátky na burzu nebo do fondu cestou ztratila.
+  // Z knihy akcionářů se vracíme sem, a kam odsud, to se schová a vrátí —
+  // jinak by se cesta zpátky na burzu nebo do fondu cestou ztratila.
   if ($('ak-kniha')) {
     $('ak-kniha').onclick = function () {
       var kam = AKCIE_KAM;
@@ -12566,24 +12637,62 @@ function akcieTrhSheet(id, smer) {
       akcieKnihaSheet(id);
     };
   }
-  var posli = function (s, btn) {
-    var n = kusu();
+  // Úpis: jediné, co se ještě kupuje od fondu.
+  if ($('ak-upis-pocet')) {
+    var upisPrepocti = function () {
+      $('ak-upis-soucet').textContent = kcFull(cislo('ak-upis-pocet') * a.cena);
+    };
+    $('ak-upis-pocet').oninput = upisPrepocti; upisPrepocti();
+    $('ak-upsat').onclick = function () {
+      var n = cislo('ak-upis-pocet');
+      var btn = this;
+      if (!(n > 0)) return toast(esc(tx('akcie.vypln')), 'err');
+      btn.disabled = true;
+      apiJson('/trade/akcie/' + id + '/obchod', { smer: 'koupit', pocet: n })
+        .then(function (r) {
+          btn.disabled = false;
+          if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
+          vyzvedniNasledky();
+          toast(tx('veta.akcie_zobchodovano', { p1: r.j.pocet, p2: r.j.castka }), 'ok');
+          znovu();
+        }).catch(function () { btn.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
+    };
+  }
+  // Nový příkaz do knihy.
+  $('ak-zadat').onclick = function () {
+    var n = cislo('ak-pocet');
+    var c = Math.max(0, Math.round(Number(($('ak-cena') || {}).value) || 0));
+    var btn = this;
     if (!(n > 0)) return toast(esc(tx('akcie.vypln')), 'err');
+    if (!(c > 0)) return toast(esc(tx('akcie.vypln_cenu')), 'err');
     btn.disabled = true;
-    apiJson('/trade/akcie/' + id + '/obchod', { smer: s, pocet: n })
+    apiJson('/trade/akcie/' + id + '/prikaz', { smer: smerTed, pocet: n, cena: c })
       .then(function (r) {
         btn.disabled = false;
         if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
         vyzvedniNasledky();
-        toast(tx('veta.akcie_zobchodovano', { p1: r.j.pocet, p2: r.j.castka }), 'ok');
-        // Seznam burzy teď lže — cena i počty se pohnuly. Načte se znovu,
-        // až se do něj hráč vrátí.
-        AKCIE_SEZNAM = null;
-        loadAkcieTrh(id, function () { akcieTrhSheet(id, smer); });
+        // Dvě různé zprávy: něco se hned zobchodovalo, nebo příkaz jen leží
+        // v knize a čeká. Splést to znamená, že hráč čeká na peníze, které
+        // nepřijdou, nebo hledá příkaz, který se už vyřídil.
+        toast(r.j.zobchodovano
+          ? tx('veta.akcie_zobchodovano', { p1: r.j.zobchodovano, p2: r.j.castka })
+          : tx('veta.akcie_prikaz_lezi', { p1: r.j.zbyva, p2: r.j.cena }), 'ok');
+        znovu();
       }).catch(function () { btn.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
   };
-  if ($('ak-koupit')) $('ak-koupit').onclick = function () { posli('koupit', this); };
-  if ($('ak-prodat')) $('ak-prodat').onclick = function () { posli('prodat', this); };
+  // Zrušení vlastního příkazu.
+  [].forEach.call(($('sheet-body') || document).querySelectorAll('[data-ak-zrus]'), function (t) {
+    t.onclick = function () {
+      t.disabled = true;
+      apiJson('/trade/akcie/' + id + '/prikaz/' + t.getAttribute('data-ak-zrus') + '/zrusit', {})
+        .then(function (r) {
+          t.disabled = false;
+          if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
+          toast(esc(tx('akcie.prikaz_zrusen')), 'ok');
+          znovu();
+        }).catch(function () { t.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
+    };
+  });
 }
 
 // Karta na záložce Burza. Vidí ji každý, i ten, kdo v žádném fondu není — o to

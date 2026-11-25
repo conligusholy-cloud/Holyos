@@ -5,19 +5,21 @@
 // člen fondu a o chování fondu nehlasuje — rozhodují dál jen členové podle
 // vkladů. Co akcionář má: díl na hodnotě fondu a nárok na vyhlášenou dividendu.
 //
-// CENU SI NEURČUJE KUPUJÍCÍ. Je jedna platná cena a tu hraje poptávka:
+// Akcie mají dvě patra, stejně jako doopravdy:
 //
-// 1. Při vydání ji určí fond hlasováním — to je vyvolávací cena.
-// 2. Pak už s ní hýbe jen obchodování. Kdo koupí, povytlačí ji nahoru; kdo
-//    prodá, srazí ji dolů. Tím víc, čím větší kus naráz: koupě jednoho
-//    procenta všech akcií hne cenou o procento. Kdo tedy skoupí velký balík,
-//    si ho sám prodraží — stejně jako doopravdy.
+// 1. ÚPIS. Cenu i počet kusů určí fond hlasováním a za tu cenu je rozprodá.
+//    Po celý úpis je pevná — fond neprodává dráž tomu, kdo přišel později.
+// 2. BURZA. Co je upsané, si hráči předávají mezi sebou za cenu, na které se
+//    potkají. Fond je z toho venku: nevykupuje a nedoprodává. Pravidla knihy
+//    příkazů jsou v akcie-kniha.js, tenhle modul o ně nezavadí.
 //
-// Protistranou je VŽDYCKY fond: prodává ze svých nevydaných kusů a vykupuje
-// zpátky z pokladny. Proto se dá vždycky koupit i prodat a nikdo nečeká, až
-// se najde druhá strana. Dřív tu byl pořadník nabídek, kde si cenu psal
-// každý sám — dalo se tím položit nabídku za deset korun a vypadalo to
-// divně, protože to divné bylo.
+// Cena akcie je proto poslední uzavřený obchod, ne vzoreček. Dřív byl
+// protistranou vždycky fond a cena se posouvala podle objemu obchodu —
+// pohodlné (koupit i prodat šlo kdykoli), ale nebyl to trh.
+//
+// Co s cenou hýbe mimo obchod: přecenění. Když fond koupí podíl pod cenou
+// nebo mu držená firma poroste, vyroste účetní hodnota akcie a cena jde
+// stejným poměrem s ní — prémie nebo diskont trhu zůstane, jaký byl.
 //
 // Tenhle modul je jen pravidla a počty. Databáze, peníze a doručenky jsou
 // v routes/game-trade.routes.js.
@@ -28,10 +30,6 @@ const CENA_MAX = 1000000000;
 const POCET_MIN = 1;
 const POCET_MAX = 1000000;
 const PODIL_MAX = 0.9;           // víc než devět desetin fondu prodat nejde
-// Jak silně hýbe obchod cenou. Jednička znamená: koupě jednoho procenta
-// všech vydaných akcií zvedne cenu o procento. Míň by byl mrtvý graf, víc
-// by stačilo na to, aby cenou cloumal jeden hráč s hrstí kusů.
-const CITLIVOST = 1;
 
 const cislo = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
 const kusy = (x) => Math.max(0, Math.floor(cislo(x)));
@@ -85,29 +83,16 @@ function dilClenu(podilAkcionaru) {
   return Math.max(0, 1 - Math.max(0, Math.min(1, cislo(podilAkcionaru))));
 }
 
-// ─── Cena a jak s ní hýbe obchod ─────────────────────────────────────────────
-// Kam se cena posune, když se zobchoduje `pocet` kusů z celkových `celkem`.
-// Nákup nahoru, prodej dolů. Pod CENA_MIN se nikdy nespadne — akcie za nic
-// by znamenala, že fond rozdává.
-function cenaPo(cena, pocet, celkem, smer) {
-  const c = penize(cena);
-  const n = kusy(pocet);
-  const N = kusy(celkem);
-  if (!(c > 0) || !(n > 0) || !(N > 0)) return Math.max(CENA_MIN, c);
-  const hyb = CITLIVOST * Math.min(1, n / N);
-  const nova = smer === 'prodat' ? c * (1 - hyb) : c * (1 + hyb);
-  return Math.max(CENA_MIN, Math.min(CENA_MAX, Math.round(nova)));
-}
-
-// Kolik stojí celý balík. Obchoduje se za JEDNU cenu — tu dnešní; posun se
-// projeví až na dalším obchodu. Počítat průměr po cestě by znamenalo, že
-// hráč zaplatí jinak, než co mu hra ukázala, než klikl.
+// Kolik stojí celý balík. Obchoduje se za JEDNU cenu — tu, která platí; po
+// burze ji dělá poslední obchod, při úpisu to, co fond odhlasoval.
 function castkaZa(cena, pocet) {
   return penize(cena) * kusy(pocet);
 }
 
-// ─── Nákup od fondu ──────────────────────────────────────────────────────────
-// Fond prodává ze svých dosud nevydaných kusů. volne je, kolik jich má.
+// ─── Úpis ────────────────────────────────────────────────────────────────────
+// Fond prodává ze svých dosud nevydaných kusů za cenu, kterou odhlasoval.
+// volne je, kolik jich ještě má. Až dojdou, fond z obchodu vypadne a dál se
+// akcie obchodují mezi hráči v knize příkazů.
 function koupit(stav, pocet) {
   const s = stav || {};
   const n = kusy(pocet);
@@ -120,43 +105,19 @@ function koupit(stav, pocet) {
   if (castka > penize(s.hotovost)) return { ok: false, duvod: 'nemas_hotovost' };
   const v = vydani(s.hodnota, s.vydano, s.podil, n, cena);
   if (!v.ok) return v;
-  return { ok: true, pocet: n, cena, castka,
-    cena_po: cenaPo(cena, n, kusy(s.celkem), 'koupit'),
+  // Cena se úpisem nehýbe: fond prodává za to, co odhlasoval, dokud má co.
+  // Teprve burza mezi hráči cenou pohne — a tam ji dělá poslední obchod.
+  return { ok: true, pocet: n, cena, castka, cena_po: cena,
     vydano_po: v.akcie_po, podil_po: v.podil_po };
-}
-
-// ─── Prodej zpátky fondu ─────────────────────────────────────────────────────
-// Zrcadlo nákupu: fond platí z pokladny a kusy se mu vrací mezi nevydané.
-// Díl akcionářů klesne přesně o to, co fond vyplatil — jinak by se tím, kdo
-// vystoupí, ředili nebo bohatli ti, kdo zůstali.
-function prodat(stav, pocet) {
-  const s = stav || {};
-  const n = kusy(pocet);
-  const cena = penize(s.cena);
-  if (n < POCET_MIN) return { ok: false, duvod: 'pocet_maly' };
-  if (n > kusy(s.drzi)) return { ok: false, duvod: 'tolik_nedrzis' };
-  if (!(cena > 0)) return { ok: false, duvod: 'cena_mala' };
-  const castka = castkaZa(cena, n);
-  if (castka > penize(s.fond_volne)) return { ok: false, duvod: 'fond_nema' };
-  const hodnota = Math.max(0, penize(s.hodnota));
-  const hodnotaPo = Math.max(0, hodnota - castka);
-  const drzeno = kusy(s.vydano);
-  const f0 = Math.max(0, Math.min(1, cislo(s.podil)));
-  // Hodnota akcionářů mínus to, co si odnáší odcházející.
-  const akcionariPo = Math.max(0, f0 * hodnota - castka);
-  return { ok: true, pocet: n, cena, castka,
-    cena_po: cenaPo(cena, n, kusy(s.celkem), 'prodat'),
-    vydano_po: Math.max(0, drzeno - n),
-    podil_po: hodnotaPo > 0 ? Math.min(PODIL_MAX, akcionariPo / hodnotaPo) : 0 };
 }
 
 // Kolik peněz fondu akcie doopravdy přinesly.
 //
-// Počítá se jen to, kde protistranou byl FOND. Obchod bez prodávajícího jsou
-// nově vydané kusy — peníze šly do pokladny. Obchod bez kupujícího je zpětný
-// výkup — peníze z pokladny odešly. Obchod dvou hráčů mezi sebou, takové
-// řádky zůstaly z dřívějšího pořadníku, fondem nehnul ani o korunu a nesmí
-// se počítat na žádnou stranu.
+// Počítá se jen to, kde protistranou byl FOND, tedy úpis: obchod bez
+// prodávajícího jsou nově vydané kusy a peníze šly do pokladny. Obchod bez
+// kupujícího je starý zpětný výkup, ten se už nedělá, ale v historii leží.
+// Obchod dvou hráčů na burze fondem nehnul ani o korunu a nesmí se počítat
+// na žádnou stranu.
 //
 // Vrací se hrubé i čisté číslo: hrubé by lhalo fondu, ze kterého akcionáři
 // zase vystoupili.
@@ -262,5 +223,5 @@ function dividendaZaSekundu(pocetKusu, ucetniAkcie, sazba) {
   return (n * u * s) / (ROK_MS / 1000);
 }
 
-module.exports = { vydani, ucetni, ucetniPresna, dilClenu, dividendaZa, dividendaZaSekundu, ROK_MS, SAZBA_MAX, kniha, cenaPo, castkaZa, koupit, prodat, kapital, vynosNaAkcii, precena,
-  CENA_MIN, CENA_MAX, POCET_MIN, POCET_MAX, PODIL_MAX, CITLIVOST };
+module.exports = { vydani, ucetni, ucetniPresna, dilClenu, dividendaZa, dividendaZaSekundu, ROK_MS, SAZBA_MAX, kniha, castkaZa, koupit, kapital, vynosNaAkcii, precena,
+  CENA_MIN, CENA_MAX, POCET_MIN, POCET_MAX, PODIL_MAX };

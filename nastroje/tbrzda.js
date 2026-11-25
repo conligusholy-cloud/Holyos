@@ -64,9 +64,11 @@ const OCEKAVANI = {
   '/trade/deliveries/claim': false,
   '/trade/konkurz': false,              // únikový východ se nezavírá
   '/trade/aukce/:id/koupit': true,
-  // Akcie fondu: obchod je jediná cesta, kterou se hýbe cenou, a mění
-  // hotovost i pokladnu fondu. Při díře stojí.
+  // Akcie fondu: úpis i nový příkaz do knihy jsou závazek, zrušení příkazu
+  // je jeho opak.
   '/trade/akcie/:id/obchod': true,
+  '/trade/akcie/:id/prikaz': true,
+  '/trade/akcie/:id/prikaz/:pid/zrusit': false,
   '/trade/trh': true,
   '/trade/trh/:id/stahnout': false,
   '/trade/trh/:id/koupit': true,
@@ -75,7 +77,8 @@ const OCEKAVANI = {
 };
 
 // Vzorek za :id. Čísla i textové klíče — aukce se nejmenují číslem.
-const vzorek = (c) => c.replace(/:id/g, c.indexOf('/aukce/') >= 0 ? 'praha-1-max' : '12');
+const vzorek = (c) => c.replace(/:pid/g, '7')
+  .replace(/:id/g, c.indexOf('/aukce/') >= 0 ? 'praha-1-max' : '12');
 
 const zdroj = fs.readFileSync(path.join(__dirname, '..', 'routes', 'game-trade.routes.js'), 'utf8');
 const cesty = [];

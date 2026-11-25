@@ -157,12 +157,22 @@ const fond = (x) => Object.assign({ akcie_celkem: 1000, akcie_vydano: 1000,
 
   const routy = fs.readFileSync(
     path.join(__dirname, '..', 'routes', 'game-trade.routes.js'), 'utf8');
-  // Obchod cenou pohnul po svém. Kdyby si nechal starou referenci, hodinové
-  // přecenění by ten pohyb vzalo ještě jednou.
-  ok('obchod si přepisuje referenční účetní hodnotu',
+  // Úpisem přitečou fondu peníze, takže na akcii stojí víc. Kdyby si routa
+  // nechala starou referenci, hodinové přecenění by ten přírůstek vzalo
+  // ještě jednou a cena by vyskočila bez důvodu.
+  ok('úpis si přepisuje referenční účetní hodnotu',
     /akcie_ucetni: ucetniPo/.test(routy));
-  ok('a počítá ji z hodnoty PO obchodu',
-    /hodPred \+ r\.castka : hodPred - r\.castka/.test(routy));
+  ok('a počítá ji z hodnoty PO úpisu',
+    /const hodnotaPo = Math\.max\(0, hodPred \+ r\.castka\);/.test(routy));
+  // Obchod dvou hráčů na burze fondem nehne: peníze tečou mezi nimi, hodnota
+  // fondu zůstává. Referenci tedy přepisovat NESMÍ — jinak by se další
+  // přecenění měřilo proti číslu, které se nezměnilo, jen přepsalo.
+  const burza = routy.slice(routy.indexOf("router.post('/trade/akcie/:id/prikaz'"));
+  const usekB = burza.slice(0, burza.indexOf("router.post('/trade/akcie/:id/prikaz/:pid/zrusit'"));
+  ok('routa burzy se našla', usekB.length > 500);
+  ok('obchod hráčů referenci nepřepisuje', !/akcie_ucetni:/.test(usekB));
+  ok('a do grafu zapisuje tu dosavadní',
+    /CENA\.zapisCenu\(tx, alianceId, r\.cena_po, 'obchod', al\.akcie_ucetni\)/.test(usekB));
   ok('obchod zapisuje bod do řady cen',
     /CENA\.zapisCenu\(tx, alianceId, r\.cena_po, 'obchod'/.test(routy));
   ok('graf se čte z řady cen, ne z obchodů', /CENA\.radaCen\(/.test(routy));

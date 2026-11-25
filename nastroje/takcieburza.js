@@ -121,22 +121,35 @@ ok('kliknutí na tlačítko kartu neotevře',
   /closest\('button'\)\) return;/.test(seznam.slice(0, seznam.indexOf('function akcieTrhSheet'))));
 
 const trh = hra.slice(hra.indexOf('function akcieTrhSheet'));
-const usekTrh = trh.slice(0, trh.indexOf('// Karta na Burze'));
-// Se zadaným směrem je to rovnou obchod: jedno tlačítko, žádné druhé.
-ok('se zadaným směrem je jen jedno tlačítko', /jenSmer\s*\n?\s*\?\s*'<button/.test(usekTrh));
-ok('a vede z něj cesta k podrobnostem', /id="ak-detail"/.test(usekTrh));
-// I v obchodu musí být vidět strop toho směru. Hráč jinak zadá počet a dozví
-// se až z chybové hlášky, že fond tolik kusů nemá nebo na ně nemá peníze.
-const vetev = (function () {
-  const i = usekTrh.indexOf('+ (jenSmer\n');
-  const j = usekTrh.indexOf(': podrobnosti)', i);
-  return i > 0 && j > i ? usekTrh.slice(i, j) : '';
-}());
-ok('větev se zadaným směrem se v kódu našla', !!vetev);
-ok('při prodeji je v obchodu vidět, kolik fond vykoupí',
-  /akcie\.fond_vykoupi/.test(vetev) && /a\.vykoupi/.test(vetev));
-ok('a při nákupu, kolik ještě prodá',
-  /akcie\.fond_jeste_proda/.test(vetev) && /a\.volne/.test(vetev));
+const usekTrh = trh.slice(0, trh.indexOf('// Karta na záložce Burza'));
+ok('obrazovka trhu se v kódu našla', usekTrh.length > 500 && usekTrh.length < trh.length);
+
+// Dvě patra, která se nesmí splést. Úpis je nákup od fondu za pevnou cenu,
+// burza je příkaz do knihy. Kdyby se z obrazovky nepoznalo, které je které,
+// hráč klikne na jedno a čeká výsledek druhého.
+ok('úpis se ukáže, jen dokud fond má co prodat', /b\.upis_zbyva > 0/.test(usekTrh));
+ok('a je u něj vidět, kolik fondu zbývá',
+  /akcie\.fond_jeste_proda[\s\S]{0,120}b\.upis_zbyva/.test(usekTrh));
+ok('úpis kupuje od fondu starou cestou',
+  /apiJson\('\/trade\/akcie\/' \+ id \+ '\/obchod', \{ smer: 'koupit'/.test(usekTrh));
+ok('na burze se zadává i cena', /id="ak-cena"/.test(usekTrh));
+ok('a příkaz jde do knihy', /'\/prikaz', \{ smer: smerTed, pocet: n, cena: c \}/.test(usekTrh));
+ok('směr se dá přepnout', /id="ak-s-koupit"/.test(usekTrh) && /id="ak-s-prodat"/.test(usekTrh));
+// Cenové pásmo musí být vidět U POLÍČKA, ne až v chybové hlášce.
+ok('meze pásma stojí u ceny',
+  /veta\.akcie_pasmo[\s\S]{0,120}b\.mez\.min[\s\S]{0,60}b\.mez\.max/.test(usekTrh));
+// A strop toho směru taky: na nákup peníze, na prodej volné kusy.
+ok('u nákupu je vidět volná hotovost',
+  /veta\.akcie_volna_hotovost[\s\S]{0,80}b\.volna_hotovost/.test(usekTrh));
+ok('u prodeje volné kusy', /veta\.akcie_volne_kusy[\s\S]{0,80}b\.volne_kusy/.test(usekTrh));
+// Zobchodováno hned vs. leží v knize jsou dvě různé zprávy. Splést je znamená,
+// že hráč čeká peníze, které nepřijdou.
+ok('po zadání se rozlišuje obchod od čekání',
+  /r\.j\.zobchodovano[\s\S]{0,160}veta\.akcie_prikaz_lezi/.test(usekTrh));
+ok('vlastní příkaz jde zrušit', /data-ak-zrus/.test(usekTrh));
+// Fond akcie nevykupuje — po tom, co to uměl, nesmí v obrazovce nic zbýt.
+ok('po výkupu fondem nezbyla stopa',
+  !/akcie\.fond_vykoupi/.test(hra) && !/a\.vykoupi/.test(hra));
 // Návrat. Zavřít se musí tam, odkud hráč přišel.
 ok('zavřít vede zpátky, ne na mapu', /\$\('ak-zavrit'\)\.onclick = akcieZpet/.test(usekTrh));
 const zpet = hra.slice(hra.indexOf('function akcieZpet'));

@@ -36,9 +36,12 @@ const CESTY = [
   /^\/trade\/fond\/odkup-zpet$/,
   /^\/trade\/aliance\/fond\/navrh\/[^/]+\/protinavrh$/,
 
-  // Akcie fondu: obchod je jediná cesta, kterou se hýbe cenou, a mění
-  // hotovost i pokladnu fondu. Při díře stojí.
+  // Akcie fondu: úpis bere hráči hotovost a fondu přidává do pokladny,
+  // příkaz do knihy je slib zaplatit nebo dodat kusy. Oboje je nový závazek,
+  // tak při díře stojí. Zrušení příkazu ne — to je opak závazku a brzda
+  // nemá nikoho zamykat v knize.
   /^\/trade\/akcie\/[^/]+\/obchod$/,
+  /^\/trade\/akcie\/[^/]+\/prikaz$/,
 
   /^\/trade\/trh$/,                     // nový inzerát na trhu
   /^\/trade\/trh\/\d+\/koupit$/,
