@@ -212,6 +212,15 @@ ok('prodávajícímu přijde nový stroj na sklad',
 ok('a stroj na místě přejde kupujícímu', /kind: 'unit_add', spot_id: m\.spot_id, model: m\.model/.test(R));
 
 ok('výloha zápůjčku pozná', /n\.druh === 'se_strojem' \? 'market\.druh_se_strojem'/.test(hra));
+// Fotka stroje. U hotové provozovny i u zápůjčky stojí stroj na místě, takže
+// se kreslí naplno; u samotného místa tam ještě není a fotka v plné síle by
+// slibovala něco, co v ceně není.
+ok('nabídka má fotku stroje',
+  /class="trh-foto[\s\S]{0,120}MODEL_IMG\[misto \? \(n\.model_pro \|\| 'flex'\) : n\.model\]/.test(hra)
+  || /var im = MODEL_IMG\[misto \? \(n\.model_pro \|\| 'flex'\) : n\.model\][\s\S]{0,200}class="trh-foto/.test(hra));
+ok('u místa bez stroje je fotka odlišená',
+  /\(misto \? ' pripravene' : ''\)/.test(hra)
+  && /\.trh-foto\.pripravene\{/.test(cti('public/compounder/game/game.css')));
 ok('a počítá cenu i se strojem', /kcFull\(r\.celkem\)/.test(hra));
 ok('master ji nabídne z karty území',
   /data-market-mista="/.test(hra)

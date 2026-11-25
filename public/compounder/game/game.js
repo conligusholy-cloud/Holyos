@@ -13526,7 +13526,14 @@ function marketPolozka(n) {
   var r = marketRozpis(n);
   var druh = misto ? 'market.druh_misto'
     : (n.druh === 'se_strojem' ? 'market.druh_se_strojem' : 'market.druh_provozovna');
+  // Fotka stroje. U hotové provozovny i u zápůjčky je to ten stroj, který na
+  // místě doopravdy stojí. U samotného místa je to stroj, pro který je místo
+  // připravené — ten tam ale ještě není, takže se kreslí zašle a přerušovaně.
+  // Fotka v plné síle by slibovala něco, co kupující nedostane.
+  var im = MODEL_IMG[misto ? (n.model_pro || 'flex') : n.model] || MODEL_IMG.flex;
   return '<div class="trh-p">'
+    + '<img class="trh-foto' + (misto ? ' pripravene' : '') + '" src="' + esc(im.src)
+    + '" alt="' + esc(m.name || '') + '">'
     + '<div class="trh-txt">'
       + '<div class="trh-hl"><b>' + esc(n.name || tx('hra.misto_5')) + '</b>'
       + '<b class="' + (n.moje ? 'warn' : 'ok') + '">' + kcFull(r.celkem) + '</b></div>'

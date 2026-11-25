@@ -964,6 +964,9 @@ button.kv:active{background:rgba(124,92,255,.12)}
   border:1px solid var(--border);border-radius:14px;padding:10px}
 .trh-foto{width:62px;height:62px;flex:none;object-fit:contain;border-radius:11px;
   background:rgba(120,160,255,.07);border:1px solid var(--border)}
+/* Místo bez stroje: fotka ukazuje, pro co je připravené, ale stroj tam ještě
+   nestojí. Zašlá a přerušovaná, ať to není slib něčeho, co v ceně není. */
+.trh-foto.pripravene{opacity:.45;border-style:dashed}
 .trh-txt{flex:1;min-width:0}
 .trh-hl{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .trh-hl b{font-size:14.5px}
