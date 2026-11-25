@@ -3522,7 +3522,7 @@ router.get('/trade/akcie/:id/trh', hrac, api(async (req, res) => {
     REZ.volne(req.player, stavu(req.player)),
   ]);
   const zamcene = KNIHA.zamceneAkcie(moje);
-  res.json({ ok: true, trh: Object.assign(KNIHA.hloubka(vse, 8), {
+  res.json({ ok: true, trh: Object.assign(KNIHA.hloubka(vse, 8, req.player.id), {
     aliance_id: alianceId, nazev: al.nazev,
     cena: Math.max(0, Math.round(al.akcie_cena || 0)),
     // Meze pásma. Hra je ukazuje u políčka s cenou, ať hráč nezadává příkaz,

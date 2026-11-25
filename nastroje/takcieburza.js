@@ -133,7 +133,8 @@ ok('a je u něj vidět, kolik fondu zbývá',
 ok('úpis kupuje od fondu starou cestou',
   /apiJson\('\/trade\/akcie\/' \+ id \+ '\/obchod', \{ smer: 'koupit'/.test(usekTrh));
 ok('na burze se zadává i cena', /id="ak-cena"/.test(usekTrh));
-ok('a příkaz jde do knihy', /'\/prikaz', \{ smer: smerTed, pocet: n, cena: c \}/.test(usekTrh));
+ok('a příkaz jde do knihy', /'\/prikaz', \{ smer: s, pocet: n, cena: c \}/.test(usekTrh));
+ok('formulář posílá přepnutý směr', /posliPrikaz\(smerTed, cislo\('ak-pocet'\)/.test(usekTrh));
 ok('směr se dá přepnout', /id="ak-s-koupit"/.test(usekTrh) && /id="ak-s-prodat"/.test(usekTrh));
 // Cenové pásmo musí být vidět U POLÍČKA, ne až v chybové hlášce.
 ok('meze pásma stojí u ceny',
@@ -147,6 +148,27 @@ ok('u prodeje volné kusy', /veta\.akcie_volne_kusy[\s\S]{0,80}b\.volne_kusy/.te
 ok('po zadání se rozlišuje obchod od čekání',
   /r\.j\.zobchodovano[\s\S]{0,160}veta\.akcie_prikaz_lezi/.test(usekTrh));
 ok('vlastní příkaz jde zrušit', /data-ak-zrus/.test(usekTrh));
+// Tlačítko „vzít" u řádku knihy. Obchod se jím uzavře jedním klikem, takže
+// na něm musí stát, co udělá a za kolik — a nesmí nabízet víc, než se dá.
+const hloubkaF = (hra.match(/function akcieVzitKolik\(b, x, smer\) \{[\s\S]*?\n\}/) || [''])[0];
+ok('počet k vzetí počítá vlastní funkce', !!hloubkaF);
+ok('moje vlastní kusy se z řádku odečtou', /\(x\.pocet \|\| 0\) - \(x\.moje \|\| 0\)/.test(hloubkaF));
+ok('na nákup se strop počítá z volné hotovosti',
+  /b\.volna_hotovost \|\| 0\) \/ Math\.max\(1, x\.cena\)/.test(hloubkaF));
+ok('na prodej z volných kusů', /b\.volne_kusy \|\| 0/.test(hloubkaF));
+const hl = hra.slice(hra.indexOf('function akcieHloubkaHtml'));
+const usekH = hl.slice(0, hl.indexOf('function akciePrikazyHtml'));
+ok('na tlačítku stojí počet i částka', /veta\.akcie_vzit[\s\S]{0,80}kolik \* x\.cena/.test(usekH));
+ok('nulový počet tlačítko nekreslí', /kolik > 0 && vejde/.test(usekH));
+ok('a cena mimo pásmo taky ne',
+  /x\.cena >= b\.mez\.min && x\.cena <= b\.mez\.max/.test(usekH));
+// Formulář i tlačítko posílají totéž jednou cestou. Dvě cesty znamenají dvě
+// místa, kde se dá splést směr nebo cena.
+ok('obě cesty posílají jednou funkcí',
+  /var posliPrikaz = function \(s, n, c, btn\)/.test(usekTrh)
+  && (usekTrh.match(/posliPrikaz\(/g) || []).length >= 2);
+ok('tlačítko bere počet i cenu z řádku',
+  /data-pocet'\), 10\)[\s\S]{0,120}data-cena'\), 10\)/.test(usekTrh));
 // Fond akcie nevykupuje — po tom, co to uměl, nesmí v obrazovce nic zbýt.
 ok('po výkupu fondem nezbyla stopa',
   !/akcie\.fond_vykoupi/.test(hra) && !/a\.vykoupi/.test(hra));

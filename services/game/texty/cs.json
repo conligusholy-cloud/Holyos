@@ -3568,6 +3568,8 @@
   "veta.akcie_sazba_rocne": "{p1} % p.a. · {penize:p2} měsíčně",
   "veta.akcie_volna_hotovost": "Volná hotovost: {penize:p1}",
   "veta.akcie_volne_kusy": "Volné k nabídnutí: {cislo:p1} kusů",
+  "veta.akcie_vzit": "Vzít {cislo:p1} × za {penize:p2}",
+  "veta.akcie_z_toho_moje": "z toho moje {cislo:p1}",
   "veta.akcie_zobchodovano": "Zobchodováno {p1} akcií za {penize:p2}.",
   "veta.aliance_cena_za_vstup": "Cena za vstup: svůj hlas přenecháš mluvčímu. I kdybys sám měl blokační čtvrtinu, ve fondu ji má blok, ne ty.",
   "veta.aliance_jak_funguje": "Ve firmách, kde drží podíl víc členů, jedná za blok ten z nich, kdo tam má nejvíc.",

@@ -128,6 +128,20 @@ ok('stejné ceny se sečtou do jednoho řádku',
 ok('nabídka jde od nejlevnější', h.nabidka[0].cena === 1050);
 ok('poptávka od nejdražší', h.poptavka[0].cena === 1000);
 ok('nejlepší ceny sedí', h.nejlepsi_nabidka === 1050 && h.nejlepsi_poptavka === 1000);
+// U řádku se zvlášť počítá, kolik z těch kusů je mých. Bez toho by tlačítko
+// „vzít" nabízelo vlastní kusy — hráč klikne a nestane se nic, jen mu v knize
+// zůstane ležet nový příkaz.
+const hJa = K.hloubka([
+  { smer: 'prodat', pocet: 5, cena: 1100, player_id: 1 },
+  { smer: 'prodat', pocet: 7, cena: 1100, player_id: 2 },
+  { smer: 'prodat', pocet: 4, cena: 1050, player_id: 2 },
+], 8, 1);
+ok('na řádku je vidět, kolik kusů je mých',
+  hJa.nabidka[1].pocet === 12 && hJa.nabidka[1].moje === 5);
+ok('cizí řádek moje kusy nemá', hJa.nabidka[0].moje === 0);
+ok('bez hráče se nic za moje nepovažuje',
+  K.hloubka([{ smer: 'prodat', pocet: 5, cena: 1100, player_id: 1 }], 8).nabidka[0].moje === 0);
+
 ok('prázdná kniha má nuly, ne nedefinováno',
   K.hloubka([], 8).nejlepsi_nabidka === 0 && K.hloubka(null, 8).poptavka.length === 0);
 // Vyřízený příkaz s nulou kusů v hloubce nemá co dělat.
@@ -148,6 +162,9 @@ const p = routy.slice(routy.indexOf("router.post('/trade/akcie/:id/prikaz'"));
 const usek = p.slice(0, p.indexOf("router.post('/trade/akcie/:id/prikaz/:pid/zrusit'"));
 ok('routa příkazu se v obsluze našla', usek.length > 500);
 ok('pravidla počítá služba, ne routa', /KNIHA\.zkontroluj\(/.test(usek) && /KNIHA\.sparuj\(/.test(usek));
+// Hloubka se posílá s mým id: jinak by hra nevěděla, které kusy na řádku
+// jsou moje, a tlačítko „vzít" by nabízelo obchod se sebou samým.
+ok('hloubka se počítá s mým id', /KNIHA\.hloubka\(vse, 8, req\.player\.id\)/.test(routy));
 // Kniha se musí přečíst ZNOVU uvnitř transakce: mezi kontrolou a zápisem
 // mohl někdo jiný koupit a párovalo by se proti stavu, který už neplatí.
 const tx = usek.slice(usek.indexOf('prisma.$transaction'));

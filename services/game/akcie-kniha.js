@@ -151,15 +151,24 @@ function sparuj(novy, kniha) {
 
 // Hloubka knihy pro hru: kusy sečtené po cenách, od nejlepší nabídky dolů.
 // Hráč nepotřebuje vidět, kdo co zadal — potřebuje vidět, kde je trh.
-function hloubka(prikazy, kolik) {
+//
+// U každého řádku se zvlášť počítá, kolik z těch kusů je MÝCH. Hra podle toho
+// ví, kolik se dá z řádku doopravdy vzít: se sebou samým hráč neobchoduje,
+// takže tlačítko „vzít" nesmí nabízet vlastní kusy — jinak klikne a nestane se
+// nic, jen mu zůstane v knize ležet nový příkaz.
+function hloubka(prikazy, kolik, jaId) {
+  const ja = cislo(jaId);
   const l = (prikazy || []).filter((p) => kusy(p.pocet) > 0);
   const sloz = (smer) => {
     const mapa = new Map();
+    const moje = new Map();
     l.filter((p) => p.smer === smer).forEach((p) => {
       const c = penize(p.cena);
       mapa.set(c, (mapa.get(c) || 0) + kusy(p.pocet));
+      if (ja && cislo(p.player_id) === ja) moje.set(c, (moje.get(c) || 0) + kusy(p.pocet));
     });
-    const radky = Array.from(mapa.entries()).map(([cena, pocet]) => ({ cena, pocet }));
+    const radky = Array.from(mapa.entries())
+      .map(([cena, pocet]) => ({ cena, pocet, moje: moje.get(cena) || 0 }));
     // Poptávka od nejvyšší ceny, nabídka od nejnižší — nahoře je vždycky to,
     // co se zobchoduje jako první.
     radky.sort((a, b) => (smer === 'koupit' ? b.cena - a.cena : a.cena - b.cena));

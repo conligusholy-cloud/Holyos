@@ -12447,10 +12447,32 @@ function loadAkcieBurza(id, then) {
 }
 // Hloubka knihy. Nahoře nabídky (kdo prodává) od nejlevnější, dole poptávky
 // (kdo kupuje) od nejdražší — uprostřed je rozpětí, ve kterém se trh potkává.
+//
+// U každého řádku stojí tlačítko, kterým se dá nabídka rovnou vzít. Je na něm
+// napsané, co udělá a za kolik — klik tedy není naslepo, ale vrátit se nedá.
+// Kolik se dá vzít, počítají tři meze: kolik na řádku zbývá po odečtení mých
+// vlastních kusů (se sebou hráč neobchoduje), na co mám peníze a kolik kusů
+// mám volných. Mimo cenové pásmo se tlačítko nekreslí — příkaz by neprošel.
+function akcieVzitKolik(b, x, smer) {
+  var cizi = Math.max(0, (x.pocet || 0) - (x.moje || 0));
+  var strop = smer === 'koupit'
+    ? Math.floor((b.volna_hotovost || 0) / Math.max(1, x.cena))
+    : (b.volne_kusy || 0);
+  return Math.max(0, Math.min(cizi, strop));
+}
 function akcieHloubkaHtml(b) {
-  var radek = function (x, trida) {
-    return '<div class="row"><span class="muted small">' + tCislo(x.pocet) + ' ×</span>'
-      + '<span class="' + trida + '">' + kcFull(x.cena) + '</span></div>';
+  var radek = function (x, trida, smer) {
+    var kolik = akcieVzitKolik(b, x, smer);
+    var vejde = x.cena >= b.mez.min && x.cena <= b.mez.max;
+    return '<div class="row"><span class="muted small">' + tCislo(x.pocet) + ' ×'
+      + (x.moje ? ' · ' + tx('veta.akcie_z_toho_moje', { p1: x.moje }) : '') + '</span>'
+      + '<span><b class="' + trida + '">' + kcFull(x.cena) + '</b>'
+      + (kolik > 0 && vejde
+          ? ' <button class="btn sm" data-ak-vzit="' + smer + '" data-cena="' + x.cena
+            + '" data-pocet="' + kolik + '">'
+            + tx('veta.akcie_vzit', { p1: kolik, p2: kolik * x.cena }) + '</button>'
+          : '')
+      + '</span></div>';
   };
   var nab = b.nabidka || [];
   var pop = b.poptavka || [];
@@ -12459,11 +12481,11 @@ function akcieHloubkaHtml(b) {
   }
   return '<div class="row"><span class="muted small">' + esc(tx('akcie.nabidka')) + '</span>'
     + '<span class="muted small">' + esc(tx('akcie.za_kus')) + '</span></div>'
-    + (nab.length ? nab.map(function (x) { return radek(x, 'err'); }).join('')
+    + (nab.length ? nab.map(function (x) { return radek(x, 'err', 'koupit'); }).join('')
         : '<p class="fine">' + esc(tx('akcie.nabidka_zadna')) + '</p>')
     + '<div class="row" style="margin-top:6px"><span class="muted small">'
     + esc(tx('akcie.poptavka')) + '</span></div>'
-    + (pop.length ? pop.map(function (x) { return radek(x, 'ok'); }).join('')
+    + (pop.length ? pop.map(function (x) { return radek(x, 'ok', 'prodat'); }).join('')
         : '<p class="fine">' + esc(tx('akcie.poptavka_zadna')) + '</p>');
 }
 // Moje příkazy v knize. Zrušit se dá kdykoli, dokud do nich nikdo neprodá.
@@ -12658,15 +12680,14 @@ function akcieTrhSheet(id, smer) {
         }).catch(function () { btn.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
     };
   }
-  // Nový příkaz do knihy.
-  $('ak-zadat').onclick = function () {
-    var n = cislo('ak-pocet');
-    var c = Math.max(0, Math.round(Number(($('ak-cena') || {}).value) || 0));
-    var btn = this;
+  // Jedna cesta pro oba způsoby zadání: formulář i tlačítko „vzít" u řádku
+  // knihy posílají totéž. Dvě cesty by znamenaly dvě místa, kde se dá splést
+  // směr nebo cena.
+  var posliPrikaz = function (s, n, c, btn) {
     if (!(n > 0)) return toast(esc(tx('akcie.vypln')), 'err');
     if (!(c > 0)) return toast(esc(tx('akcie.vypln_cenu')), 'err');
     btn.disabled = true;
-    apiJson('/trade/akcie/' + id + '/prikaz', { smer: smerTed, pocet: n, cena: c })
+    apiJson('/trade/akcie/' + id + '/prikaz', { smer: s, pocet: n, cena: c })
       .then(function (r) {
         btn.disabled = false;
         if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
@@ -12680,6 +12701,20 @@ function akcieTrhSheet(id, smer) {
         znovu();
       }).catch(function () { btn.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
   };
+  // Nový příkaz do knihy.
+  $('ak-zadat').onclick = function () {
+    posliPrikaz(smerTed, cislo('ak-pocet'),
+      Math.max(0, Math.round(Number(($('ak-cena') || {}).value) || 0)), this);
+  };
+  // Vzít nabídku přímo z knihy. Počet i cena jsou z řádku, na který hráč
+  // klikl, a stojí mu na tlačítku — obchod se uzavře hned.
+  [].forEach.call(($('sheet-body') || document).querySelectorAll('[data-ak-vzit]'), function (t) {
+    t.onclick = function () {
+      posliPrikaz(t.getAttribute('data-ak-vzit'),
+        Math.max(0, parseInt(t.getAttribute('data-pocet'), 10) || 0),
+        Math.max(0, parseInt(t.getAttribute('data-cena'), 10) || 0), t);
+    };
+  });
   // Zrušení vlastního příkazu.
   [].forEach.call(($('sheet-body') || document).querySelectorAll('[data-ak-zrus]'), function (t) {
     t.onclick = function () {
