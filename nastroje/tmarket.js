@@ -157,8 +157,21 @@ ok('místa vidí jen master území', /if \(!u\.moje\) continue;/.test(RU));
 
 ok('karta území místa ukazuje', /unieMistaHtml\(u\)/.test(hra));
 // Holý zábor bez přípojek nabízet nejde — to je kus mapy, ne nabídka.
+// Seznam je proto rozdělený: co jde nabídnout, co visí, co je rozdělané
+// a co je v území ještě volné.
 ok('nabídnout jde jen připravené místo nebo místo se strojem',
-  /var lze = !m\.na_marketu && \(m\.model \|\| m\.pripojky\);/.test(hra));
+  /var lze = l\.filter\(function \(m\) \{ return !m\.na_marketu && \(m\.model \|\| m\.pripojky\); \}\);/.test(hra));
+ok('rozdělané místo se nenabízí, ale je vidět',
+  /var rozdelane = l\.filter\(function \(m\) \{ return !m\.na_marketu && !m\.model && !m\.pripojky; \}\);/.test(hra)
+  && /unie\.misto_dodelat/.test(hra));
+// Volná místa v území jsou to, co masterovi dělá sklad. Bez nich byl seznam
+// jen přehledem toho, co už stojí — a nebylo z čeho vybírat, co připravit.
+ok('volná místa v území jsou v seznamu taky', /function unieVolnaVUzemi\(u\)/.test(hra)
+  && /r\.stav === 'volna'/.test(hra));
+ok('berou se jen města toho území', /klice\[r\.areaId\]/.test(hra)
+  && /u\.mesta_klice = mesta;/.test(RU));
+ok('a dají se rovnou otevřít',
+  /otevriMisto\(b\.getAttribute\('data-unie-misto'\)\)/.test(hra));
 const n = hra.match(/function marketNaklady\(m\) \{[\s\S]*?\n\}/);
 ok('v game.js se našlo: marketNaklady', !!n);
 if (n) {
@@ -201,7 +214,7 @@ ok('a stroj na místě přejde kupujícímu', /kind: 'unit_add', spot_id: m\.spo
 ok('výloha zápůjčku pozná', /n\.druh === 'se_strojem' \? 'market\.druh_se_strojem'/.test(hra));
 ok('a počítá cenu i se strojem', /kcFull\(r\.celkem\)/.test(hra));
 ok('master ji nabídne z karty území',
-  /var lze = !m\.na_marketu && \(m\.model \|\| m\.pripojky\);/.test(hra)
+  /data-market-mista="/.test(hra)
   && /druh: zapujcka \? 'se_strojem' : 'misto'/.test(hra));
 ['market.druh_se_strojem', 'market.zapujcka_popis', 'market.zapujcka_jak',
   'market.nabidnout_se_strojem', 'market.stroj_na_miste',

@@ -91,7 +91,7 @@ router.get('/unie/prehled', requirePlayer, jenUnie, async (req, res, next) => {
       const [claims, nabidky, nazvy] = await Promise.all([
         prisma.gameSpotClaim.findMany({
           where: { player_id: me.id, area_key: { in: mesta } },
-          orderBy: { id: 'asc' }, take: 60,
+          orderBy: { id: 'asc' }, take: 200,
         }),
         prisma.gameMarket.findMany({
           where: { player_id: me.id, koupil_id: null, zruseno_at: null, do: { gt: new Date() } },
@@ -111,6 +111,11 @@ router.get('/unie/prehled', requirePlayer, jenUnie, async (req, res, next) => {
         rent: Math.max(0, Math.round(c.rent || 0)),
         na_marketu: visi.has(c.spot_id),
       }));
+      // Města, která do území patří. Volná místa hra nedotahuje ze serveru —
+      // zná je ze svých prozkoumaných měst a podle tohohle seznamu si je
+      // vybere. Jinak by master v kartě viděl jen to, co už drží, a nevěděl,
+      // co v území ještě zbývá připravit.
+      u.mesta_klice = mesta;
     }
 
     // Volné oblasti, kde mám prádlomaty: co by stálo je převzít.

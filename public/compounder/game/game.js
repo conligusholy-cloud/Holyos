@@ -8126,26 +8126,71 @@ function unieMistoStav(m) {
   if (m.pozemek) return tx('unie.misto_pozemek');
   return tx('unie.misto_holé');
 }
+// Volná místa v území. Nechodí ze serveru — hra je zná ze svých prozkoumaných
+// měst, takže se na ně dá rovnou klepnout a otevřít je. Server pošle jen
+// seznam měst, která do území patří.
+function unieVolnaVUzemi(u) {
+  var klice = {};
+  (u.mesta_klice || []).forEach(function (k) { klice[k] = 1; });
+  if (!Object.keys(klice).length) return [];
+  return vsechnaMista().filter(function (r) {
+    return klice[r.areaId] && r.stav === 'volna';
+  });
+}
+// Jeden řádek seznamu. Název vlevo, pod ním drobně město a stav, vpravo jedna
+// akce. Dřív stálo „Nabídnout i se strojem" přímo v tlačítku, zalamovalo se
+// to přes tři řádky a seznam se nedal přečíst — co se nabízí, patří do stavu,
+// ne do tlačítka.
+function unieMistoRadek(nazev, pod, akce) {
+  return '<div class="row"><span>' + esc(nazev)
+    + '<i class="muted small" style="display:block">' + pod + '</i></span>'
+    + '<span>' + akce + '</span></div>';
+}
+var UNIE_VOLNYCH = 8;      // kolik volných míst se ukáže najednou
 function unieMistaHtml(u) {
   var l = u.mista || [];
-  if (!l.length) return '';
+  var volna = unieVolnaVUzemi(u);
+  if (!l.length && !volna.length) return '';
+  // Tři skupiny, protože jsou to tři různé věci: co už visí na Market place,
+  // co jde nabídnout hned, a co je v území volné a stačí to připravit.
+  var visi = l.filter(function (m) { return m.na_marketu; });
+  var lze = l.filter(function (m) { return !m.na_marketu && (m.model || m.pripojky); });
+  var rozdelane = l.filter(function (m) { return !m.na_marketu && !m.model && !m.pripojky; });
+  var skupina = function (nadpis, pocet, telo) {
+    if (!pocet) return '';
+    return '<p class="muted small" style="margin:12px 0 2px"><b>' + esc(nadpis)
+      + '</b> · ' + pocet + '</p>' + telo;
+  };
   return '<h4 style="margin:14px 0 2px">' + esc(tx('unie.moje_mista')) + '</h4>'
     + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('unie.moje_mista_popis')) + '</p>'
-    + l.map(function (m) {
-        // Nabídnout jde připravené místo bez stroje, nebo místo i se strojem
-        // (zápůjčka) — ten kupující přebere v chodu a masterovi přijde nový
-        // na sklad. Holý zábor bez přípojek nabízet nejde, to je kus mapy.
-        var lze = !m.na_marketu && (m.model || m.pripojky);
-        return '<div class="kv"><span>' + esc(m.nazev)
-          + ' <i class="muted small">' + esc(m.mesto) + ' · ' + esc(unieMistoStav(m)) + '</i></span>'
-          + (m.na_marketu
-            ? '<b class="ok">' + esc(tx('unie.misto_visi')) + '</b>'
-            : (lze
-              ? '<button class="btn sm sec" data-market-mista="' + esc(m.spot_id) + '">'
-                + esc(tx(m.model ? 'market.nabidnout_se_strojem' : 'unie.misto_nabidnout')) + '</button>'
-              : '<b class="muted">—</b>'))
-          + '</div>';
-      }).join('');
+    + skupina(tx('unie.mista_lze'), lze.length, lze.map(function (m) {
+        return unieMistoRadek(m.nazev, esc(m.mesto) + ' · ' + esc(unieMistoStav(m)),
+          '<button class="btn sm sec" data-market-mista="' + esc(m.spot_id) + '">'
+          + esc(tx('unie.misto_nabidnout')) + '</button>');
+      }).join(''))
+    + skupina(tx('unie.mista_visi_nadpis'), visi.length, visi.map(function (m) {
+        return unieMistoRadek(m.nazev, esc(m.mesto) + ' · ' + esc(unieMistoStav(m)),
+          '<b class="ok">' + esc(tx('unie.misto_visi')) + '</b>');
+      }).join(''))
+    + skupina(tx('unie.mista_rozdelane'), rozdelane.length, rozdelane.map(function (m) {
+        return unieMistoRadek(m.nazev, esc(m.mesto) + ' · ' + esc(unieMistoStav(m)),
+          '<b class="muted small">' + esc(tx('unie.misto_dodelat')) + '</b>');
+      }).join(''))
+    // Volná místa jsou to, co masterovi dělá sklad: najde je, připraví
+    // a nabídne. Bez nich byl seznam jen přehledem toho, co už stojí.
+    + skupina(tx('unie.mista_volna'), volna.length,
+        '<p class="fine">' + esc(tx('unie.mista_volna_popis')) + '</p>'
+        + volna.slice(0, UNIE_VOLNYCH).map(function (r) {
+            return unieMistoRadek(r.sp.name || tx('hra.misto_4'),
+              esc(r.mesto) + ' · ' + tx('veta.unie_misto_skore', { p1: Math.round(r.sp.score || 0) }),
+              '<button class="btn sm sec" data-unie-misto="' + esc(r.sp.id) + '">'
+              + esc(tx('unie.misto_otevrit')) + '</button>');
+          }).join('')
+        + (volna.length > UNIE_VOLNYCH
+          ? '<p class="fine">' + esc(tx('unie.mista_volna_vic', { p1: volna.length - UNIE_VOLNYCH })) + '</p>'
+          : ''))
+    + (!l.length && !volna.length
+      ? '<p class="fine">' + esc(tx('unie.mista_zadna')) + '</p>' : '');
 }
 // Co s územím dělat. Hráč, který právě koupil území, kouká na prázdnou kartu
 // a neví, proč ji drží — tohle mu pokaždé řekne jeden další krok.
@@ -8282,6 +8327,11 @@ function bindUnie() {
       });
       if (m) marketVypsatMistoSheet(m);
     };
+  });
+  // Volné místo v území. Hra ho zná ze svých prozkoumaných měst, takže se
+  // otevře rovnou jeho karta — odsud se dá zabrat a připravit.
+  [].forEach.call(box.querySelectorAll('[data-unie-misto]'), function (b) {
+    b.onclick = function () { otevriMisto(b.getAttribute('data-unie-misto')); };
   });
   // Koupě operátorské licence. Platí se masterovi a běžný podíl ze servisu
   // pak chodí operátorovi — proto to stojí peníze hned.
