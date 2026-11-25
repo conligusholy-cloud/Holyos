@@ -46,9 +46,9 @@ async function jenUnie(req, res, next) {
 router.get('/unie/prehled', requirePlayer, jenUnie, async (req, res, next) => {
   try {
     const me = req.player;
-    // Území z doby, kdy se vázala na město, se při prvním pohledu převedou
-    // na okres. Bez toho by nenašla ani jeden zábor a hlásila prázdno.
-    await OKRESY.prevedStaraUzemi().catch(() => {});
+    // Území z doby, kdy se vázala na město, se převedou na okres. Běží to na
+    // pozadí: převod sahá na cizí službu a přehled na ni čekat nesmí.
+    OKRESY.prevodNaPozadi();
     const nast = await UNIE.nastaveni();
     const moje_role = await UNIE.role(me.id);
 
@@ -140,20 +140,21 @@ router.get('/unie/prehled', requirePlayer, jenUnie, async (req, res, next) => {
 // moje. Žádné vyúčtování se tu nepočítá — mapa se překresluje často.
 router.get('/unie/mapa', requirePlayer, jenUnie, async (req, res, next) => {
   try {
-    await OKRESY.prevedStaraUzemi().catch(() => {});
+    OKRESY.prevodNaPozadi();
     const uzemi = await prisma.gameTerritory.findMany({
       select: { okres_key: true, master_id: true, master_nick: true, poplatek_pct: true, nespokojenost: true },
     });
     if (!uzemi.length) return res.json({ ok: true, uzemi: [] });
-    // Hranice okresu. Chybí-li (cizí služba zrovna neodpověděla), zkusí se
-    // znovu — a dokud nedorazí, nakreslí hra kolem středu kruh jako dřív.
+    // Hranice okresu. Chybí-li, spustí se stahování NA POZADÍ a odpoví se tím,
+    // co v databázi je — mapa zatím nakreslí kolem středu kruh. Čekat tady na
+    // cizí službu znamená panel, který se nenačte: přesně na tom přehled Unie
+    // jednou uvízl na „Načítám…".
     const klice = uzemi.map((t) => t.okres_key);
-    let okresy = await prisma.gameOkres.findMany({ where: { key: { in: klice } } }).catch(() => []);
+    const okresy = await prisma.gameOkres.findMany({ where: { key: { in: klice } } }).catch(() => []);
     for (const k of klice) {
       const mam = okresy.find((o) => o.key === k);
-      if (!mam || !mam.hranice) await OKRESY.zajisti(k, mam && mam.nazev, mam && mam.zeme).catch(() => {});
+      if (!mam || !mam.hranice) OKRESY.zajistiNaPozadi(k, mam && mam.nazev, mam && mam.zeme);
     }
-    okresy = await prisma.gameOkres.findMany({ where: { key: { in: klice } } }).catch(() => []);
     const mapa = {};
     okresy.forEach((o) => { mapa[o.key] = o; });
     // Nespokojenost se počítá, ne čte: uložená hodnota se posouvá až při

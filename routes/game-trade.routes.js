@@ -4162,7 +4162,7 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
       return res.status(403).json({ error: stx(req)('server.unie_zatim_nedostupna') });
     }
     const oblast = await prisma.gameArea.findUnique({ where: { key: c.area_key } }).catch(() => null);
-    const okres = oblast ? await OKRESY.proOblast(oblast).catch(() => null) : null;
+    const okres = oblast ? await OKRESY.proOblastTed(oblast).catch(() => null) : null;
     const uzemi = okres ? await prisma.gameTerritory.findUnique({ where: { okres_key: okres.key } }).catch(() => null) : null;
     const licence = okres ? await prisma.gameOperatorLicence.findFirst({
       where: { okres_key: okres.key, player_id: req.player.id, zrusena: false } }).catch(() => null) : null;
@@ -4180,7 +4180,7 @@ router.post('/trade/trh', hrac, api(async (req, res) => {
       return res.status(403).json({ error: stx(req)('server.unie_zatim_nedostupna') });
     }
     const oblast = await prisma.gameArea.findUnique({ where: { key: c.area_key } }).catch(() => null);
-    const okres = oblast ? await OKRESY.proOblast(oblast).catch(() => null) : null;
+    const okres = oblast ? await OKRESY.proOblastTed(oblast).catch(() => null) : null;
     const uzemi = okres ? await prisma.gameTerritory.findUnique({ where: { okres_key: okres.key } }).catch(() => null) : null;
     const licence = okres ? await prisma.gameOperatorLicence.findFirst({
       where: { okres_key: okres.key, player_id: req.player.id, zrusena: false } }).catch(() => null) : null;

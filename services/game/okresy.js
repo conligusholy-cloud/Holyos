@@ -29,6 +29,28 @@ async function fetchJson(url, ms) {
   } catch (e) { return null; } finally { clearTimeout(to); }
 }
 
+// ─── Co se nikdy nedělá na cestě, po které se hráč dívá ──────────────────────
+// Stahování hranice je dotaz na cizí službu a trvá vteřiny, při výpadku desítky
+// vteřin. Přehled Unie na tom jednou uvízl: při každém pohledu se znovu zkoušel
+// okres, který se stáhnout nedaří, a panel visel na „Načítám…".
+//
+// Pravidlo je proto tvrdé: čtecí cesta sáhne jen do databáze a odpoví tím, co
+// v ní je. Co chybí, se dotáhne na pozadí a objeví se při příštím pohledu.
+// A nezkouší se pořád dokola — mezi pokusy je pauza, jinak by neúspěch znamenal
+// dotaz na cizí službu při každém načtení stránky.
+const POKUSY = new Map();
+const POKUS_PAUZA = 15 * 60 * 1000;
+function naPozadi(klic, prace) {
+  const kdy = POKUSY.get(klic) || 0;
+  if (Date.now() - kdy < POKUS_PAUZA) return false;
+  POKUSY.set(klic, Date.now());
+  // Schválně bez await: volající musí odpovědět hned.
+  Promise.resolve().then(prace).catch((e) => {
+    console.warn('[game] okresy — ' + klic + ' na pozadí selhalo:', e && e.message);
+  });
+  return true;
+}
+
 // Klíč okresu. Bez diakritiky a mezer, s kódem země napřed — „okres Šumperk"
 // je v Česku jeden, ale stejné jméno nese okres i město jinde ve světě.
 function klic(zeme, nazev) {
@@ -242,14 +264,41 @@ async function najdiHranici(nazev, zeme) {
 async function proOblast(area) {
   if (!area) return null;
   if (area.okres_key) return { key: area.okres_key, nazev: area.okres_nazev || area.okres_key };
+  // Okres se k městu ještě nedohledal. Dohledá se na pozadí a volajícímu se
+  // odpoví, že zatím není — při příštím pohledu už tam bude. Čekat na cizí
+  // službu uprostřed vykreslování panelu znamená panel, který se nenačte.
+  naPozadi('oblast:' + area.key, async () => {
+    const o = await najdiOkres(area.lat, area.lon, area.country);
+    if (!o || !o.key) return;
+    await prisma.gameArea.update({ where: { key: area.key },
+      data: { okres_key: o.key, okres_nazev: o.nazev } }).catch(() => {});
+    // Obrys z téhož dotazu — druhé hledání podle jména se tím ušetří a hlavně
+    // nemůže trefit jiný objekt.
+    await zajisti(o.key, o.nazev, o.zeme, o).catch(() => {});
+    console.log('[game] okresy — město', area.key, '→ okres', o.key);
+  });
+  return null;
+}
+
+// Okres k městu A POČKÁ si na něj. Tohle patří jen tam, kde se bez okresu
+// nedá rozhodnout — třeba když master vypisuje místo na Market place a musí
+// se ověřit, že v tom okrese opravdu je. Na čtecí cestu to nepatří nikdy.
+async function proOblastTed(area) {
+  if (!area) return null;
+  if (area.okres_key) return { key: area.okres_key, nazev: area.okres_nazev || area.okres_key };
   const o = await najdiOkres(area.lat, area.lon, area.country);
   if (!o || !o.key) return null;
   await prisma.gameArea.update({ where: { key: area.key },
     data: { okres_key: o.key, okres_nazev: o.nazev } }).catch(() => {});
-  // Obrys z téhož dotazu — druhé hledání podle jména se tím ušetří a hlavně
-  // nemůže trefit jiný objekt.
   await zajisti(o.key, o.nazev, o.zeme, o).catch(() => {});
   return { key: o.key, nazev: o.nazev };
+}
+
+// Hranice okresu na pozadí. Tohle volá čtecí cesta místo zajisti(): odpoví
+// hned a mapa zatím nakreslí kruh.
+function zajistiNaPozadi(key, nazev, zeme) {
+  if (!key) return false;
+  return naPozadi('hranice:' + key, () => zajisti(key, nazev, zeme, null));
 }
 
 // Řádek okresu i s hranicí. Když se hranice nestáhne, řádek vznikne bez ní
@@ -297,8 +346,10 @@ async function oblasti(okresKey) {
   return rows.map((r) => r.key);
 }
 
-// Okresy k seznamu měst. Města, která okres ještě nemají, se cestou doplní —
-// proto může první otevření trvat déle.
+// Okresy k seznamu měst. Čte se jen z databáze; město, které okres ještě nemá,
+// se dohledá na pozadí a v odpovědi prostě není. Hráč ho uvidí při příštím
+// otevření. Dřív se tu na dohledání čekalo — a u sítě o dvou stovkách míst
+// to znamenalo panel, který se nenačetl.
 async function proKlice(klice) {
   const out = new Map();
   if (!klice || !klice.length) return out;
@@ -356,6 +407,17 @@ async function sousedi(key) {
   const o = await prisma.gameOkres.findUnique({ where: { key } }).catch(() => null);
   if (!o) return [];
   if (Array.isArray(o.sousedi) && o.sousedi.length) return o.sousedi;
+  // Zjistit sousedy je dvanáct dotazů na cizí službu. Na cestě, po které se
+  // hráč dívá, se na ně nečeká: spustí se na pozadí a odpoví se prázdnem.
+  // Při příštím otevření už budou uložení.
+  naPozadi('sousedi:' + key, () => sousediTed(o));
+  return [];
+}
+
+// Vlastní hledání sousedů. Volá se z pozadí a z administrace, nikdy ne
+// uprostřed vykreslování panelu.
+async function sousediTed(o) {
+  const key = o.key;
   const body = Array.isArray(o.hranice) ? o.hranice : null;
   if (!body || body.length < 4) return [];
   const stred = tezisteObrysu(body);
@@ -394,7 +456,7 @@ async function prevedStaraUzemi() {
   for (const a of mesta) {
     const t = uzemi.find((x) => x.okres_key === a.key);
     if (!t) continue;
-    const o = await proOblast(a).catch(() => null);
+    const o = await proOblastTed(a).catch(() => null);
     if (!o || !o.key || o.key === t.okres_key) continue;
     const obsazeno = await prisma.gameTerritory.findUnique({ where: { okres_key: o.key } }).catch(() => null);
     if (obsazeno) {
@@ -407,6 +469,11 @@ async function prevedStaraUzemi() {
     kolik++;
   }
   return kolik;
+}
+
+// Převod starých území na pozadí. Na čtecí cestě se na něj nečeká.
+function prevodNaPozadi() {
+  return naPozadi('prevod', () => prevedStaraUzemi());
 }
 
 // Diagnostika pro administraci: zkusí po řadě všechny zdroje a řekne, co
@@ -473,5 +540,5 @@ async function diagnostika(lat, lon, zemeHint) {
 }
 
 module.exports = { klic, zjednodus, prstenec, pocetObyvatel, lookup, diagnostika,
-  najdiOkres, najdiHranici, proOblast, zajisti, oblasti, proKlice,
-  prevedStaraUzemi, sousedi, tezisteObrysu, bodVen, BODU_MAX };
+  najdiOkres, najdiHranici, proOblast, proOblastTed, zajisti, zajistiNaPozadi, oblasti, proKlice,
+  prevedStaraUzemi, prevodNaPozadi, sousedi, sousediTed, tezisteObrysu, bodVen, BODU_MAX };

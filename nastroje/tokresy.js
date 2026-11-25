@@ -90,8 +90,23 @@ ok('potenciál sčítá místa celého okresu',
 // ─── Mapa ────────────────────────────────────────────────────────────────────
 const R = cti('routes/game-unie.routes.js');
 ok('mapa posílá hranici', /hranice: Array\.isArray\(o\.hranice\) \? o\.hranice : null/.test(R));
-ok('a chybějící hranici zkusí dotáhnout', /OKRESY\.zajisti\(k, mam && mam\.nazev/.test(R));
-ok('stará území se převedou na okresy', /OKRESY\.prevedStaraUzemi\(\)/.test(R));
+ok('a chybějící hranici dotahuje NA POZADÍ',
+  /OKRESY\.zajistiNaPozadi\(k, mam && mam\.nazev/.test(R));
+// Tohle je ta past, na které přehled Unie jednou uvízl na „Načítám…":
+// při každém pohledu se znovu čekalo na cizí službu. Čtecí cesta nesmí
+// na stahování čekat vůbec.
+ok('čtecí cesta na stahování nečeká',
+  !/await OKRESY\.zajisti\(/.test(R) && !/await OKRESY\.prevedStaraUzemi\(/.test(R)
+  && !/await OKRESY\.proOblast\(/.test(R));
+ok('stará území se převedou na okresy, taky na pozadí',
+  /OKRESY\.prevodNaPozadi\(\)/.test(R));
+// A v samotném modulu: po neúspěchu se nezkouší hned znovu, jinak by každé
+// načtení stránky znamenalo dotaz na cizí službu.
+ok('mezi pokusy je pauza', /const POKUS_PAUZA = /.test(Z)
+  && /Date\.now\(\) - kdy < POKUS_PAUZA/.test(Z));
+ok('práce na pozadí se nečeká', /Promise\.resolve\(\)\.then\(prace\)/.test(Z));
+ok('a pro okres k městu je zvlášť cesta, která si počká',
+  /async function proOblastTed\(area\)/.test(Z));
 ok('převod nepřepíše cizí území',
   /obsazeno[\s\S]{0,200}console\.warn\('\[game\] unie — území'/.test(Z));
 
