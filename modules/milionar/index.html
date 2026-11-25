@@ -690,13 +690,14 @@
         var radky = l.length
           ? '<div class="tbl-wrap" style="margin-top:8px"><table class="data-table"><thead><tr>'
             + '<th>Okres</th><th>Název</th><th class="num">Obyvatel</th><th class="num">Bodů hranice</th>'
-            + '<th class="num">Sousedů</th><th></th></tr></thead><tbody>'
+            + '<th>Odkud</th><th class="num">Sousedů</th><th></th></tr></thead><tbody>'
             + l.map(function (o) {
                 var ma = o.hranice_bodu >= 4;
                 return '<tr><td><b>' + esc(o.key) + '</b></td><td>' + esc(o.nazev || '—') + '</td>'
                   + '<td class="num">' + (o.obyvatel ? cz(o.obyvatel) : '—') + '</td>'
                   + '<td class="num" style="color:' + (ma ? '#22c55e' : '#f87171') + '">'
                   + o.hranice_bodu + (ma ? '' : ' — kreslí se kruh') + '</td>'
+                  + '<td class="note">' + esc(o.zdroj || '—') + '</td>'
                   + '<td class="num">' + o.sousedu + '</td>'
                   + '<td><button class="btn sm" data-okresznovu="' + esc(o.key) + '">Stáhnout hranici</button></td></tr>';
               }).join('') + '</tbody></table></div>'

@@ -188,6 +188,9 @@ async function okresOverpass(lat, lon, zemeHint) {
   return { key: klic(zeme, nazev), nazev: String(nazev), zeme,
     obyvatel: pocetObyvatel({ extratags: rel.tags }),
     lat: Number(lat), lon: Number(lon),
+    // Odkud obrys je. Bez toho se z mapy nepozná, jestli svítí okres, nebo
+    // něco jiného, co se tak jen jmenuje — a hádalo se to čtyřikrát po sobě.
+    zdroj: 'overpass:' + String(rel.tags.admin_level || '?') + ':' + rel.id,
     hranice: obrys ? zjednodus(obrys, BODU_MAX) : null };
 }
 
@@ -209,23 +212,38 @@ async function najdiOkres(lat, lon, zemeHint) {
     + '&lon=' + encodeURIComponent(lon), 20000);
   const a = (j && j.address) || null;
   if (!a) return null;
-  const nazev = a.county || a.state_district || a.city || a.town || a.municipality || null;
+  // Jméno okresu, když ho reverse zná. Velká města (Praha, Brno) okres nemají
+  // a okresem je samo město — tam je obec správná odpověď.
+  const zOkresu = a.county || a.state_district || null;
+  const nazev = zOkresu || a.city || a.town || a.municipality || null;
   const zeme = a.country_code || null;
   if (!nazev) return null;
-  let body = prstenec(j.geojson);
+  // Reverse vrací geometrii TOHO objektu, který zrovna vybral. Když se
+  // jmenuje po okrese, ale je to obec, obrys patří obci — a na mapě by pak
+  // místo okresu svítilo město. Tahle neshoda se proto zahodí a radši zůstane
+  // kruh: okres nakreslený jako město je horší než poctivé kolečko.
+  const DRUH_OBCE = ['city', 'town', 'village', 'municipality', 'suburb',
+    'borough', 'hamlet', 'quarter', 'neighbourhood', 'city_district'];
+  const druh = String((j && j.addresstype) || '').toLowerCase();
+  const obecMistoOkresu = !!zOkresu && DRUH_OBCE.indexOf(druh) >= 0;
+  let body = obecMistoOkresu ? null : prstenec(j.geojson);
   let obyvatel = pocetObyvatel(j);
   // Reverse umí vrátit i jen bod. Doptat se na geometrii jde podle osm_id —
   // tedy na TEN objekt, ne na jméno. Hledání podle jména („okres Šumperk")
   // trefilo město Šumperk a na mapě pak svítila obec.
-  if ((!body || body.length < 4) && j.osm_type && j.osm_id) {
+  if (!obecMistoOkresu && (!body || body.length < 4) && j.osm_type && j.osm_id) {
     const d = await lookup(j.osm_type, j.osm_id);
     if (d) {
       body = prstenec(d.geojson) || body;
       obyvatel = obyvatel || pocetObyvatel(d);
     }
   }
+  if (obecMistoOkresu) {
+    console.warn('[game] okres', nazev, '— reverse vrátil', druh, ', obrys neberu');
+  }
   return { key: klic(zeme, nazev), nazev: String(nazev), zeme, obyvatel,
     lat: Number(j.lat), lon: Number(j.lon),
+    zdroj: 'nominatim:' + (druh || '?') + (obecMistoOkresu ? ':obrys-zahozen' : ''),
     hranice: body && body.length >= 4 ? zjednodus(body, BODU_MAX) : null };
 }
 
@@ -246,19 +264,6 @@ async function lookup(osmType, osmId) {
   return Array.isArray(j) && j.length ? j[0] : null;
 }
 
-// Hranice okresu. Hledá se jménem — reverse umí vrátit jméno, ale ne obrys.
-async function najdiHranici(nazev, zeme) {
-  const q = encodeURIComponent(nazev + (zeme ? ', ' + zeme : ''));
-  const j = await fetchJson('https://nominatim.openstreetmap.org/search?format=jsonv2'
-    + '&polygon_geojson=1&extratags=1&limit=1&q=' + q, 20000);
-  const x = Array.isArray(j) && j.length ? j[0] : null;
-  if (!x) return null;
-  const body = prstenec(x.geojson);
-  return {
-    lat: Number(x.lat), lon: Number(x.lon), obyvatel: pocetObyvatel(x),
-    hranice: body && body.length >= 4 ? zjednodus(body, BODU_MAX) : null,
-  };
-}
 
 // Okres města. Jednou se najde a zapíše k oblasti, pak se jen čte.
 async function proOblast(area) {
@@ -308,9 +313,8 @@ async function zajisti(key, nazev, zeme, hotovy) {
   const mam = await prisma.gameOkres.findUnique({ where: { key } }).catch(() => null);
   if (mam && mam.hranice) return mam;
   let h = (hotovy && hotovy.hranice) ? hotovy : null;
-  // Obrys se dohledává přes některé město okresu — reverse z jeho středu
-  // vrátí TEN okres i s geometrií. Hledání podle jména je až poslední
-  // záchrana: jméno není identita a „okres Šumperk" trefilo město Šumperk.
+  // Obrys se dohledává přes některé město okresu: zeptáme se na SOUŘADNICI
+  // uvnitř okresu a vezmeme objekt, který ji obsahuje. Ne na jméno.
   if (!h) {
     const mesto = await prisma.gameArea.findFirst({ where: { okres_key: key },
       select: { lat: true, lon: true, country: true } }).catch(() => null);
@@ -324,14 +328,16 @@ async function zajisti(key, nazev, zeme, hotovy) {
       console.warn('[game] okres', key, '— zdroj hlásí jiný klíč', h.key, '(obrys beru)');
     }
   }
-  if (!h || !h.hranice) {
-    const z = await najdiHranici(nazev || (mam && mam.nazev) || key, zeme || (mam && mam.zeme) || null);
-    if (z && z.hranice) h = Object.assign({}, h || {}, z);
-  }
+  // ŽÁDNÉ hledání podle jména. Bývalo tu jako poslední záchrana a bylo to
+  // přesně to, co na mapě kreslilo město místo okresu: na dotaz „Šumperk"
+  // odpoví katalog městem, protože tak se to město jmenuje. Jméno není
+  // identita. Obrys smí přijít jedině z objektu, který ten bod OBSAHUJE —
+  // z Overpassu nebo z reverse na souřadnici. Když nepřijde, zůstane kruh.
   const data = { nazev: String(nazev || (mam && mam.nazev) || key).slice(0, 120),
     zeme: (zeme || (mam && mam.zeme) || null), lat: (h && h.lat) || (mam && mam.lat),
     lon: (h && h.lon) || (mam && mam.lon),
     obyvatel: (h && h.obyvatel) || (mam && mam.obyvatel) || null,
+    zdroj: (h && h.hranice && h.zdroj) || (mam && mam.zdroj) || null,
     hranice: (h && h.hranice) || ((mam && mam.hranice) || null) };
   if (!data.hranice) console.warn('[game] okres', key, '— hranice se nestáhla, mapa nakreslí kruh');
   return prisma.gameOkres.upsert({ where: { key }, create: Object.assign({ key }, data), update: data })
@@ -540,5 +546,5 @@ async function diagnostika(lat, lon, zemeHint) {
 }
 
 module.exports = { klic, zjednodus, prstenec, pocetObyvatel, lookup, diagnostika,
-  najdiOkres, najdiHranici, proOblast, proOblastTed, zajisti, zajistiNaPozadi, oblasti, proKlice,
+  najdiOkres, proOblast, proOblastTed, zajisti, zajistiNaPozadi, oblasti, proKlice,
   prevedStaraUzemi, prevodNaPozadi, sousedi, sousediTed, tezisteObrysu, bodVen, BODU_MAX };

@@ -2426,6 +2426,7 @@ router.get('/okresy', api(async (req, res) => {
   const radky = okresy.map((o) => ({
     key: o.key, nazev: o.nazev, zeme: o.zeme, lat: o.lat, lon: o.lon, obyvatel: o.obyvatel,
     hranice_bodu: Array.isArray(o.hranice) ? o.hranice.length : 0,
+    zdroj: o.zdroj || null,
     sousedu: Array.isArray(o.sousedi) ? o.sousedi.length : 0,
     zmeneno: o.updated_at,
   }));

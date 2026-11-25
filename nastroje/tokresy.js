@@ -116,12 +116,23 @@ ok('hra kreslí polygon', /L\.polygon\(u\.hranice, styl\)/.test(hra));
 ok('a bez hranice zůstane kruh', /L\.circle\(\[u\.lat, u\.lon\], Object\.assign\(\{ radius: UZEMI_R \}/.test(hra));
 ok('polygon se kreslí jen z pořádného obrysu', /u\.hranice\.length >= 4/.test(hra));
 
-// Obrys se musí vzít z téhož dotazu, který okres určil. Hledání podle jména
-// vracelo u „okres Šumperk" město Šumperk a na mapě svítila obec místo okresu.
+// Obrys se musí vzít z objektu, který ten bod OBSAHUJE. Hledání podle jména
+// vracelo u „Šumperk" město Šumperk a na mapě svítila obec místo okresu —
+// dvakrát po sobě. Ta cesta je pryč a vrátit se nesmí.
 ok('okres si nese obrys z reverse',
   /polygon_geojson=1&lat=/.test(Z) && /hranice: body && body\.length >= 4/.test(Z));
-ok('a hledání podle jména je až poslední záchrana',
-  /if \(!h \|\| !h\.hranice\) \{\s*const z = await najdiHranici/.test(Z));
+ok('hledání hranice podle jména v kódu NENÍ', Z.indexOf('najdiHranici') < 0);
+ok('a katalog se podle jména neptá vůbec',
+  Z.indexOf('nominatim.openstreetmap.org/search') < 0);
+// Když reverse vrátí obec, ale jméno je okresní, obrys patří obci. Takový se
+// zahodí: okres nakreslený jako město je horší než poctivý kruh.
+ok('obec vydávaná za okres se nebere', /const obecMistoOkresu = !!zOkresu/.test(Z)
+  && /let body = obecMistoOkresu \? null : prstenec\(j\.geojson\)/.test(Z));
+ok('a nedoptává se na její geometrii ani podle osm_id',
+  /if \(!obecMistoOkresu && \(!body \|\| body\.length < 4\)/.test(Z));
+// U uloženého obrysu je vidět, odkud je — bez toho se čtyřikrát hádalo.
+ok('obrys si nese zdroj', /zdroj: 'overpass:'/.test(Z) && /zdroj: 'nominatim:'/.test(Z));
+ok('a ukládá se s ním', /zdroj: \(h && h\.hranice && h\.zdroj\)/.test(Z));
 ok('nalezený okres se rovnou uloží i s hranicí', /zajisti\(o\.key, o\.nazev, o\.zeme, o\)/.test(Z));
 
 // Okres je víc než jedno město a nemá stát stejně. Volná místa znají jen tu
@@ -137,7 +148,7 @@ ok('a tahá se z OSM', /function pocetObyvatel\(x\)/.test(Z) && /extratags=1/.te
 // reverse vrátil, ne podle textu „okres Šumperk".
 ok('obrys se doptává podle osm_id', /function lookup\(osmType, osmId\)/.test(Z)
   && /osm_ids=' \+ p \+ encodeURIComponent\(osmId\)/.test(Z)
-  && /if \(\(!body \|\| body\.length < 4\) && j\.osm_type && j\.osm_id\) \{[\s\S]{0,200}await lookup\(j\.osm_type, j\.osm_id\)/.test(Z));
+  && /body\.length < 4\) && j\.osm_type && j\.osm_id\) \{[\s\S]{0,200}await lookup\(j\.osm_type, j\.osm_id\)/.test(Z));
 ok('a chybějící obrys se dohledá přes město okresu',
   /najdiOkres\(mesto\.lat, mesto\.lon, mesto\.country\)/.test(Z));
 // Overpass se ptá rovnou na hranici, která ten bod obsahuje. Nominatim je

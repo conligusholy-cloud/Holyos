@@ -8017,6 +8017,9 @@ model GameOkres {
   // Zjednodušený obrys [[lat,lon], …]. Celá hranice z OSM má tisíce bodů,
   // na mapě v telefonu je k ničemu a jen by se vlekla po drátě.
   hranice    Json?
+  // Odkud obrys je — který zdroj a jaká správní úroveň. Mapa jednou kreslila
+  // místo okresu město a z uloženého obrysu to nešlo poznat; tohle to řekne.
+  zdroj      String?  @db.VarChar(60)
   // S kým okres sousedí (klíče). Zjišťuje se jednou: kolem obrysu se sáhne
   // kousek ven a zeptá se, co tam je — tabulka sousedů v OSM není.
   sousedi    Json?
