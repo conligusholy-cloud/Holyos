@@ -2500,16 +2500,20 @@ function kcHdr(n) {
 var CUR = 'L$';
 function kcFull(n) { return tPenize(n); }
 var toastT = null;
-// Hlášky se stohují nad sebou a každá má křížek. Co si hráč nezpůsobil sám —
-// výpověď z místa, porucha, doručená provize — nikam nemizí, dokud to nezavře;
-// potvrzení vlastního klepnutí po pár vteřinách zmizí samo.
-// Všechno důležité se zároveň ukládá do zvonku, ať se k tomu dá vrátit.
+// Oznámení jdou do zvonku a přes obrazovku neprobliknou.
+//
+// Dřív se stohovala nad sebou po čtyřech a zakrývala přesně to, na co se hráč
+// dívá — čtyři zelené hlášky „… je spravený a zase vydělává" přes půl karty
+// území. A většinu z nich stejně nečte, když přijdou, ale až se podívá, co se
+// mezitím stalo. Zvonek je přesně na tohle.
+//
+// Jediné, co probliká dál, je CHYBA: tu hráč nečeká a je odpovědí na to, co
+// právě zkusil. Bez ní by klikl a nestalo by se nic.
+//
+// `drz` je zbytek po starých voláních a nedělá už nic — do zvonku jde všechno.
 var TOASTU_MAX = 4;
 var TOAST_MS = 5200;
-// Hláška dole jen probliknutí — nic nezůstává viset. Co má přežít, jde do
-// zvonku: tam si to hráč přečte, až bude chtít. `drz` (a chyby) proto nemění
-// to, jak dlouho hláška svítí, ale jestli se zapíše mezi upozornění.
-// Hlášky visí pod hlavičkou, ne nad spodními tlačítky — dole překrývaly
+// Chyby visí pod hlavičkou, ne nad spodními tlačítky — dole překrývaly
 // „Koupit" a hráč je mačkal místo něj. Výška hlavičky se liší jazykem
 // i telefonem, tak si ji změříme, místo abychom ji hádali v CSS.
 function toastyPodHlavicku(box) {
@@ -2519,10 +2523,17 @@ function toastyPodHlavicku(box) {
   if (dole > 0) box.style.top = Math.round(dole + 8) + 'px';
 }
 function toast(msg, kind, drz) {
+  // Oznámení přes obrazovku neprobliká. Stohovala se po čtyřech přes půl
+  // hry a zakrývala přesně to, na co se hráč dívá — a většinu z nich stejně
+  // nečte hned, ale až se podívá, co se mezitím stalo. Všechno jde proto do
+  // zvonku a tam na něj počká.
+  //
+  // Jediná výjimka je CHYBA. Tu hráč nečeká a je odpovědí na to, co právě
+  // zkusil: bez ní by klikl a nestalo by se nic, což vypadá jako rozbitá hra.
+  if (kind !== 'err') { doZvonku(msg, kind); return; }
   var box = $('toasty');
   if (!box) return;
   toastyPodHlavicku(box);
-  var doZvonku = drz === true || kind === 'err';
   var el = document.createElement('div');
   el.className = 'toast' + (kind ? ' ' + kind : '');
   var t = document.createElement('span');
@@ -2535,7 +2546,8 @@ function toast(msg, kind, drz) {
   box.appendChild(el);
   while (box.children.length > TOASTU_MAX) box.removeChild(box.firstChild);
   setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, TOAST_MS);
-  if (doZvonku) { zapisUpoz(msg, kind); zvonekCukni(); }
+  // Chyba se ukládá taky — ať je po ní stopa, i když ji hráč odklikne.
+  doZvonku(msg, kind);
 }
 // Jen do zvonku, bez probliknutí přes obrazovku.
 //
@@ -2546,8 +2558,12 @@ function toast(msg, kind, drz) {
 //
 // Co si hráč nezpůsobil sám — porucha, výpověď, došlá provize — probliknout
 // musí dál. Tohle je na to ta hranice.
-function doZvonku(msg, kind) {
-  zapisUpoz(msg, kind || 'ok', true);
+// `vzdy` obchází pojistku zvonku proti zdvojení. Posílá se u obchodů: dva
+// stejné obchody po sobě jsou dvě události a druhý by jinak ve zvonku chyběl.
+// U běžných oznámení se naopak hodí — čtyři stejné hlášky za sebou nikdo číst
+// nechce ani ve zvonku.
+function doZvonku(msg, kind, vzdy) {
+  zapisUpoz(msg, kind || 'ok', !!vzdy);
   zvonekCukni();
 }
 // Zvoneček na mapě krátce cukne, ať je poznat, že něco přibylo.
@@ -12750,8 +12766,8 @@ function akcieTrhSheet(id, smer) {
         .then(function (r) {
           btn.disabled = false;
           if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
-          vyzvedniNasledky(null, true);
-          doZvonku(tx('veta.akcie_zobchodovano', { p1: r.j.pocet, p2: r.j.castka }), 'ok');
+          vyzvedniNasledky();
+          doZvonku(tx('veta.akcie_zobchodovano', { p1: r.j.pocet, p2: r.j.castka }), 'ok', true);
           znovu();
         }).catch(function () { btn.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
     };
@@ -12767,7 +12783,7 @@ function akcieTrhSheet(id, smer) {
       .then(function (r) {
         btn.disabled = false;
         if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
-        vyzvedniNasledky(null, true);
+        vyzvedniNasledky();
         // Dvě různé zprávy: něco se hned zobchodovalo, nebo příkaz jen leží
         // v knize a čeká. Splést to znamená, že hráč čeká na peníze, které
         // nepřijdou, nebo hledá příkaz, který se už vyřídil.
@@ -12776,7 +12792,7 @@ function akcieTrhSheet(id, smer) {
         // a kniha se mu hned pod rukou překreslí. Do zvonku to jde celé.
         doZvonku(r.j.zobchodovano
           ? tx('veta.akcie_zobchodovano', { p1: r.j.zobchodovano, p2: r.j.castka })
-          : tx('veta.akcie_prikaz_lezi', { p1: r.j.zbyva, p2: r.j.cena }), 'ok');
+          : tx('veta.akcie_prikaz_lezi', { p1: r.j.zbyva, p2: r.j.cena }), 'ok', true);
         znovu();
       }).catch(function () { btn.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
   };
@@ -15202,9 +15218,7 @@ function cenaSheet(toId, kdo, x) {
 // ─── Následky uzavřených obchodů ─────────────────────────────────────────────
 // Hotovost, sklad a postavené prádlomaty žijí v prohlížeči, takže si je sem
 // musíme donést sami. Server si pak poznamená, že je máme vyřízené.
-// `tise` = hlášku o doručeném neprobliknout, jen ji uložit do zvonku. Posílá
-// se odtamtud, kde si hráč výsledek právě vyvolal sám a vidí ho na obrazovce.
-function vyzvedniNasledky(then, tise) {
+function vyzvedniNasledky(then) {
   if (!ME) { if (then) then(); return; }
   api('/trade/deliveries').then(function (r) {
     var vse = (r.ok && r.j.deliveries) || [];
@@ -15339,8 +15353,8 @@ function vyzvedniNasledky(then, tise) {
     vse.forEach(function (x) { if (NEPOTVRZENE.indexOf(x.id) < 0) NEPOTVRZENE.push(x.id); });
     save(); paint(); drawMap(); syncState(true);
     if (zpravy.length) {
-      var veta = zpravy[0] + (zpravy.length > 1 ? tx('veta.dalsich', { p1: (zpravy.length - 1) }) : '');
-      if (tise) doZvonku(veta, 'ok'); else toast(veta, 'ok', true);
+      doZvonku(zpravy[0]
+        + (zpravy.length > 1 ? tx('veta.dalsich', { p1: (zpravy.length - 1) }) : ''), 'ok');
     }
     if (then) then();
   }).catch(function () { if (then) then(); });

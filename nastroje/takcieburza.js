@@ -173,8 +173,9 @@ ok('obě cesty posílají jednou funkcí',
 ok('potvrzení obchodu jde do zvonku, ne přes obrazovku',
   /doZvonku\(r\.j\.zobchodovano/.test(usekTrh)
   && !/toast\(r\.j\.zobchodovano/.test(usekTrh));
-ok('a doručenku k němu taky — u úpisu i u příkazu',
-  (usekTrh.match(/vyzvedniNasledky\(null, true\)/g) || []).length >= 2);
+// Doručenka se po obchodu vyzvedne hned, ať hráč nekouká na staré číslo.
+ok('doručenka se po obchodu vyzvedne — u úpisu i u příkazu',
+  (usekTrh.match(/vyzvedniNasledky\(\)/g) || []).length >= 2);
 ok('zrušení příkazu taky neprobliká', /doZvonku\(tx\('akcie\.prikaz_zrusen'\)/.test(usekTrh));
 // Chyby naopak probliknout MUSÍ: ty hráč nečeká a bez nich by klikal naprázdno.
 // Chyby naopak probliknout MUSÍ, a to každá: nevyplněný počet, nevyplněná
@@ -190,7 +191,16 @@ ok('mlčící server taky',
 // zdvojení potlačuje — u potvrzení obchodu se proto obchází.
 const zv = hra.slice(hra.indexOf('function doZvonku'));
 ok('potvrzení se do zvonku zapíše i podruhé',
-  /zapisUpoz\(msg, kind \|\| 'ok', true\)/.test(zv.slice(0, 200)));
+  /zapisUpoz\(msg, kind \|\| 'ok', !!vzdy\)/.test(zv.slice(0, 300))
+  && /veta\.akcie_prikaz_lezi', \{ p1: r\.j\.zbyva, p2: r\.j\.cena \}\), 'ok', true\)/.test(usekTrh));
+// Žádné oznámení už přes obrazovku neprobliká — stohovala se po čtyřech
+// a zakrývala přesně to, na co se hráč dívá. Všechno jde do zvonku.
+const tst = hra.slice(hra.indexOf('function toast(msg, kind, drz)'));
+ok('toast posílá všechno do zvonku',
+  /if \(kind !== 'err'\) \{ doZvonku\(msg, kind\); return; \}/.test(tst.slice(0, 900)));
+// Chyba je výjimka: je odpovědí na to, co hráč právě zkusil.
+ok('a chybu pořád ukáže', /var box = \$\('toasty'\);/.test(tst.slice(0, 1200)));
+ok('chyba se do zvonku uloží taky', /doZvonku\(msg, kind\);\n\}/.test(tst.slice(0, 1800)));
 const zu = hra.slice(hra.indexOf('function zapisUpoz'));
 ok('a zvonek takový zápis umí', /!vzdy && i >= 0/.test(zu.slice(0, 700)));
 
