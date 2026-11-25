@@ -167,6 +167,33 @@ ok('a cena mimo pásmo taky ne',
 ok('obě cesty posílají jednou funkcí',
   /var posliPrikaz = function \(s, n, c, btn\)/.test(usekTrh)
   && (usekTrh.match(/posliPrikaz\(/g) || []).length >= 2);
+// Potvrzení obchodu neprobliká přes obrazovku — hráč ho právě sám vyvolal
+// a hláška uprostřed mu zakrývá knihu. Jde rovnou do zvonku, kde si to
+// přečte. Zahodit se nesmí: je to o penězích.
+ok('potvrzení obchodu jde do zvonku, ne přes obrazovku',
+  /doZvonku\(r\.j\.zobchodovano/.test(usekTrh)
+  && !/toast\(r\.j\.zobchodovano/.test(usekTrh));
+ok('a doručenku k němu taky — u úpisu i u příkazu',
+  (usekTrh.match(/vyzvedniNasledky\(null, true\)/g) || []).length >= 2);
+ok('zrušení příkazu taky neprobliká', /doZvonku\(tx\('akcie\.prikaz_zrusen'\)/.test(usekTrh));
+// Chyby naopak probliknout MUSÍ: ty hráč nečeká a bez nich by klikal naprázdno.
+// Chyby naopak probliknout MUSÍ, a to každá: nevyplněný počet, nevyplněná
+// cena, odmítnutí serveru i mlčící server. Hráč je nečeká a bez nich by
+// klikal naprázdno.
+ok('chybí počet — probliká', /return toast\(esc\(tx\('akcie\.vypln'\)\), 'err'\)/.test(usekTrh));
+ok('chybí cena — probliká', /return toast\(esc\(tx\('akcie\.vypln_cenu'\)\), 'err'\)/.test(usekTrh));
+ok('odmítnutí serveru probliká',
+  (usekTrh.match(/return toast\(\(r\.j && r\.j\.error\)/g) || []).length >= 3);
+ok('mlčící server taky',
+  (usekTrh.match(/toast\(esc\(tx\('mapa\.server_neodpovida_6'\)\), 'err'\)/g) || []).length >= 3);
+// Dvakrát stejný obchod po sobě jsou dvě události. Zvonek je pojistkou proti
+// zdvojení potlačuje — u potvrzení obchodu se proto obchází.
+const zv = hra.slice(hra.indexOf('function doZvonku'));
+ok('potvrzení se do zvonku zapíše i podruhé',
+  /zapisUpoz\(msg, kind \|\| 'ok', true\)/.test(zv.slice(0, 200)));
+const zu = hra.slice(hra.indexOf('function zapisUpoz'));
+ok('a zvonek takový zápis umí', /!vzdy && i >= 0/.test(zu.slice(0, 700)));
+
 ok('tlačítko bere počet i cenu z řádku',
   /data-pocet'\), 10\)[\s\S]{0,120}data-cena'\), 10\)/.test(usekTrh));
 // Fond akcie nevykupuje — po tom, co to uměl, nesmí v obrazovce nic zbýt.

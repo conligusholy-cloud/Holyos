@@ -2537,6 +2537,19 @@ function toast(msg, kind, drz) {
   setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, TOAST_MS);
   if (doZvonku) { zapisUpoz(msg, kind); zvonekCukni(); }
 }
+// Jen do zvonku, bez probliknutí přes obrazovku.
+//
+// Pro potvrzení toho, co hráč právě sám udělal: ví o tom, panel se mu
+// překreslil před očima a hláška uprostřed obrazovky mu jen zakrývá to, na co
+// se dívá — na burze zrovna knihu příkazů. Zahodit se to ale nesmí, je to
+// o penězích: uloží se to do zvonku a zvoneček cukne.
+//
+// Co si hráč nezpůsobil sám — porucha, výpověď, došlá provize — probliknout
+// musí dál. Tohle je na to ta hranice.
+function doZvonku(msg, kind) {
+  zapisUpoz(msg, kind || 'ok', true);
+  zvonekCukni();
+}
 // Zvoneček na mapě krátce cukne, ať je poznat, že něco přibylo.
 function zvonekCukni() {
   var el = $('map-zvon');
@@ -2548,12 +2561,16 @@ function zvonekCukni() {
 }
 // ─── Zvonek: co se stalo, když se hráč zrovna nedíval ────────────────────────
 var UPOZ_MAX = 60;
-function zapisUpoz(text, kind) {
+// `vzdy` = připsat i tehdy, když stejná věta nedávno byla. Posílá se u
+// potvrzení obchodu: dva stejné obchody po sobě jsou dvě různé události a
+// druhý by se jinak do zvonku nedostal — a byl by to chybějící řádek
+// o penězích, ne ušetřené opakování.
+function zapisUpoz(text, kind, vzdy) {
   if (!S) return;
   if (!Array.isArray(S.upoz)) S.upoz = [];
   // Pojistka proti zdvojení: stejnou větu do deseti minut už nepřipisujeme.
   var ted = Date.now(), txt = String(text || '').slice(0, 300);
-  for (var i = S.upoz.length - 1; i >= 0 && ted - (S.upoz[i].t || 0) < 10 * 60e3; i--) {
+  for (var i = S.upoz.length - 1; !vzdy && i >= 0 && ted - (S.upoz[i].t || 0) < 10 * 60e3; i--) {
     if (S.upoz[i].x === txt) return;
   }
   S.upoz.push({ t: Date.now(), x: String(text || '').slice(0, 300), k: kind || '', p: 0 });
@@ -12674,8 +12691,8 @@ function akcieTrhSheet(id, smer) {
         .then(function (r) {
           btn.disabled = false;
           if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
-          vyzvedniNasledky();
-          toast(tx('veta.akcie_zobchodovano', { p1: r.j.pocet, p2: r.j.castka }), 'ok');
+          vyzvedniNasledky(null, true);
+          doZvonku(tx('veta.akcie_zobchodovano', { p1: r.j.pocet, p2: r.j.castka }), 'ok');
           znovu();
         }).catch(function () { btn.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
     };
@@ -12691,11 +12708,14 @@ function akcieTrhSheet(id, smer) {
       .then(function (r) {
         btn.disabled = false;
         if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
-        vyzvedniNasledky();
+        vyzvedniNasledky(null, true);
         // Dvě různé zprávy: něco se hned zobchodovalo, nebo příkaz jen leží
         // v knize a čeká. Splést to znamená, že hráč čeká na peníze, které
         // nepřijdou, nebo hledá příkaz, který se už vyřídil.
-        toast(r.j.zobchodovano
+        //
+        // Nic z toho neprobliká přes obrazovku: hráč to právě sám udělal
+        // a kniha se mu hned pod rukou překreslí. Do zvonku to jde celé.
+        doZvonku(r.j.zobchodovano
           ? tx('veta.akcie_zobchodovano', { p1: r.j.zobchodovano, p2: r.j.castka })
           : tx('veta.akcie_prikaz_lezi', { p1: r.j.zbyva, p2: r.j.cena }), 'ok');
         znovu();
@@ -12723,7 +12743,7 @@ function akcieTrhSheet(id, smer) {
         .then(function (r) {
           t.disabled = false;
           if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
-          toast(esc(tx('akcie.prikaz_zrusen')), 'ok');
+          doZvonku(tx('akcie.prikaz_zrusen'), 'ok');
           znovu();
         }).catch(function () { t.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
     };
@@ -15116,7 +15136,9 @@ function cenaSheet(toId, kdo, x) {
 // ─── Následky uzavřených obchodů ─────────────────────────────────────────────
 // Hotovost, sklad a postavené prádlomaty žijí v prohlížeči, takže si je sem
 // musíme donést sami. Server si pak poznamená, že je máme vyřízené.
-function vyzvedniNasledky(then) {
+// `tise` = hlášku o doručeném neprobliknout, jen ji uložit do zvonku. Posílá
+// se odtamtud, kde si hráč výsledek právě vyvolal sám a vidí ho na obrazovce.
+function vyzvedniNasledky(then, tise) {
   if (!ME) { if (then) then(); return; }
   api('/trade/deliveries').then(function (r) {
     var vse = (r.ok && r.j.deliveries) || [];
@@ -15250,7 +15272,10 @@ function vyzvedniNasledky(then) {
     // Nejdřív do fronty k potvrzení, teprve pak uložení — ať jede obojí naráz.
     vse.forEach(function (x) { if (NEPOTVRZENE.indexOf(x.id) < 0) NEPOTVRZENE.push(x.id); });
     save(); paint(); drawMap(); syncState(true);
-    if (zpravy.length) toast(zpravy[0] + (zpravy.length > 1 ? tx('veta.dalsich', { p1: (zpravy.length - 1) }) : ''), 'ok', true);
+    if (zpravy.length) {
+      var veta = zpravy[0] + (zpravy.length > 1 ? tx('veta.dalsich', { p1: (zpravy.length - 1) }) : '');
+      if (tise) doZvonku(veta, 'ok'); else toast(veta, 'ok', true);
+    }
     if (then) then();
   }).catch(function () { if (then) then(); });
 }
