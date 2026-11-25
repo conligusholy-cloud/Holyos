@@ -508,9 +508,9 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
-# Rozšiřování území o sousední okresy. Území si smíš vzít jen tam, kam
+# Rozšiřování území o sousední buňky. Území si smíš vzít jen tam, kam
 # dosáhneš servisem — jinak jde skoupit půl republiky od stolu.
-if git diff --cached --name-only | grep -qE 'services/game/okresy|routes/game-unie|public/compounder/game/game.js'; then
+if git diff --cached --name-only | grep -qE 'services/game/okresy|services/game/sit|routes/game-unie|public/compounder/game/game.js'; then
   if ! node nastroje/tunierozsireni.js; then
     echo ""
     echo "STOP: rozšiřování území nesedí (viz výš)."
@@ -518,9 +518,10 @@ if git diff --cached --name-only | grep -qE 'services/game/okresy|routes/game-un
   fi
 fi
 
-# Území Unie je okres, ne město. Zábor nese město, takže se mezi tím musí
-# překládat — bez toho území nenajde ani jeden stroj a tiše vychází nula.
-if git diff --cached --name-only | grep -qE 'services/game/okresy|services/game/unie|routes/game-unie|public/compounder/game/game.js|prisma/schema.prisma'; then
+# Území Unie je buňka sítě o velikosti okresu — musí platit na celé zeměkouli
+# a nesmí se kvůli ní nikam sahat po síti. Zábor nese MĚSTO, takže se mezi tím
+# musí překládat; bez toho území nenajde ani jeden stroj a tiše vychází nula.
+if git diff --cached --name-only | grep -qE 'services/game/okresy|services/game/sit|services/game/unie|routes/game-unie|public/compounder/game/game.js|prisma/schema.prisma'; then
   if ! node nastroje/tokresy.js; then
     echo ""
     echo "STOP: okresy jako území nesedí (viz výš)."

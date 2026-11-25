@@ -1,16 +1,25 @@
-// Území Unie je okres, ne město.
+// Území Unie je buňka sítě, která pokrývá celou zeměkouli.
 //
 // Dokud se území vázalo na město, kreslil se na mapě kruh o sedmi kilometrech
-// kolem jeho středu. Byla to kresba bez podkladu: dvě města v jednom okrese
-// by se překrývala a hráč nepoznal, kde území končí. Okres je hranice, která
-// někde doopravdy je — stáhne se z OpenStreetMap, zjednoduší a nakreslí.
+// kolem jeho středu — kresba bez podkladu. Pak se zkoušel skutečný okres
+// z OpenStreetMap; z produkce se ale stáhnout nedal a když se hra o hranici
+// pokusila podle jména, dostala místo okresu stejnojmenné město. A hlavně:
+// hra se hraje po celém světě a správní členění srovnatelné s okresem všude
+// není.
 //
-// Hlídá se tu troje: že se klíč okresu dá spočítat stejně pokaždé, že obrys
-// projde zjednodušením a nezbyde z něj čára, a že se zábory (ty nesou MĚSTO)
-// hledají přes překlad město→okres, ne přímo podle klíče okresu.
+// Teď je území buňka pravidelné šestiúhelníkové sítě o velikosti zhruba
+// okresu. Hlídá se tu čtvero:
+//
+//  1. Síť platí na celé zeměkouli a pokaždé stejně. Kdyby se klíč u téhož
+//     bodu lišil, rozpadlo by se hráčům, co drží.
+//  2. Buňka má velikost okresu, ne města a ne kraje. Na tom stojí cena
+//     licence i to, kolik se do území vejde prádlomatů.
+//  3. Obrys je mnohoúhelník a sousedé jsou skutečně sousedi — z toho žije
+//     kreslení mapy a rozšiřování přes „+".
+//  4. Nic se nestahuje. Jedna cizí služba na čtecí cestě stačila na to, aby
+//     panel Unie visel na „Načítám…".
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
 
 let chyb = 0;
 function ok(co, podminka, detail) {
@@ -19,174 +28,168 @@ function ok(co, podminka, detail) {
 }
 const koren = path.join(__dirname, '..');
 const cti = (p) => fs.readFileSync(path.join(koren, p), 'utf8');
-const Z = cti('services/game/okresy.js');
-
-// Čisté funkce se vytáhnou ze souboru — vyžádat si modul nejde, tahá za sebou
-// databázi.
-const kusy = ['klic', 'vzdalenost', 'dp', 'zjednodus', 'prstenec'].map(function (jm) {
-  const re = new RegExp('function ' + jm + '\\([\\s\\S]*?\\n\\}');
-  const m = Z.match(re);
-  ok('v okresy.js se našlo: ' + jm, !!m);
-  return m ? m[0] : '';
-});
-const box = { BODU_MAX: 160 };
-vm.createContext(box);
-vm.runInContext(kusy.join('\n'), box);
+// Geometrie je schválně v modulu bez databáze — jde tedy vyžádat a doopravdy
+// spustit, ne jen číst jako text.
+const S = require('../services/game/sit');
 
 // ─── Klíč ────────────────────────────────────────────────────────────────────
-ok('klíč je bez diakritiky a s kódem země',
-  box.klic('CZ', 'okres Šumperk') === 'cz:okres-sumperk', '— ' + box.klic('CZ', 'okres Šumperk'));
-ok('stejný okres dá vždy stejný klíč',
-  box.klic('cz', 'Okres  Šumperk ') === box.klic('CZ', 'okres Šumperk'));
-// Stejné jméno v jiné zemi je jiné území — bez kódu země by se slila.
-ok('země klíč odliší', box.klic('pl', 'Opole') !== box.klic('cz', 'Opole'));
-ok('prázdné jméno klíč nedá', box.klic('cz', '') === '');
-ok('nesmysl nic neshodí', box.klic(null, null) === '');
+const SUMPERK = [49.9653, 16.9706];
+const k1 = S.klicBodu(SUMPERK[0], SUMPERK[1]);
+ok('bod má klíč', !!k1 && typeof k1 === 'string', '— ' + k1);
+ok('a je to klíč naší sítě', S.jeKlic(k1) === true);
+ok('stejný bod dá vždy stejný klíč', S.klicBodu(SUMPERK[0], SUMPERK[1]) === k1);
+// Starý klíč okresu tím musí propadnout — podle toho se pozná, co převést.
+ok('starý klíč okresu propadne', S.jeKlic('cz:sumperk') === false);
+ok('prázdno a nesmysly propadnou taky',
+  S.jeKlic(null) === false && S.jeKlic('') === false && S.jeKlic('841e227') === false);
+ok('nesmyslné souřadnice klíč nedají',
+  S.klicBodu(null, 1) === null && S.klicBodu('x', 'y') === null && S.klicBodu(95, 10) === null);
+
+// ─── Celá zeměkoule ──────────────────────────────────────────────────────────
+// Tohle je ten důvod, proč se od skutečných okresů odešlo: musí to fungovat
+// všude, ne jen tam, kde se povede něco stáhnout.
+(function () {
+  let spatnych = 0, bunek = new Set();
+  for (let la = -85; la <= 85; la += 5) {
+    for (let lo = -180; lo < 180; lo += 10) {
+      const k = S.klicBodu(la, lo);
+      if (!k || !S.jeKlic(k)) { spatnych++; continue; }
+      bunek.add(k);
+      const o = S.obrys(k);
+      if (!o || o.length < 4) spatnych++;
+    }
+  }
+  ok('klíč i obrys vyjdou v každém koutě světa', spatnych === 0, '— vadných ' + spatnych);
+  ok('a nejsou to pořád tytéž buňky', bunek.size > 500, '— různých ' + bunek.size);
+}());
+
+// ─── Velikost ────────────────────────────────────────────────────────────────
+// Český okres má v průměru kolem 1 000 km². Buňka musí být v tomhle řádu:
+// kdyby byla velká jako kraj, území by si rozebralo pět hráčů a bylo by po
+// pozdní hře; kdyby byla jako město, nebyl by to okres.
+(function () {
+  const mesta = [['Šumperk', 49.9653, 16.9706], ['Praha', 50.0875, 14.4213],
+    ['Sydney', -33.8688, 151.2093], ['Nairobi', -1.2921, 36.8219],
+    ['Reykjavík', 64.1466, -21.9426], ['Singapur', 1.3521, 103.8198]];
+  const male = [], velke = [];
+  mesta.forEach(function (m) {
+    const p = S.plocha(S.klicBodu(m[1], m[2]));
+    if (p < 700) male.push(m[0] + ' ' + p);
+    if (p > 3000) velke.push(m[0] + ' ' + p);
+  });
+  ok('buňka není menší než okres', male.length === 0, male.join(', '));
+  ok('a není větší než okres', velke.length === 0, velke.join(', '));
+}());
 
 // ─── Obrys ───────────────────────────────────────────────────────────────────
-const ctverec = { type: 'Polygon', coordinates: [[[17, 50], [17.1, 50], [17.1, 50.1], [17, 50.1], [17, 50]]] };
-let r = box.prstenec(ctverec);
-ok('GeoJSON se přetočí na [lat,lon]', r[0][0] === 50 && r[0][1] === 17, '— ' + JSON.stringify(r[0]));
-// U MultiPolygonu (okres s exklávou) se kreslí ten hlavní, ne všechny přes sebe.
-const multi = { type: 'MultiPolygon', coordinates: [
-  [[[17, 50], [17.01, 50], [17, 50.01], [17, 50]]],
-  [[[18, 51], [18.5, 51], [18.5, 51.5], [18, 51.5], [18, 51], [18.2, 51.2]]],
-] };
-ok('z MultiPolygonu se bere největší kus', box.prstenec(multi).length === 6,
-  '— ' + box.prstenec(multi).length);
-ok('neznámý tvar vrátí prázdno', box.prstenec({ type: 'Point', coordinates: [1, 2] }) === null);
-ok('prázdný vstup taky', box.prstenec(null) === null);
+const o1 = S.obrys(k1);
+ok('obrys je mnohoúhelník, ne čára', o1.length >= 4, '— vrcholů ' + o1.length);
+ok('obrys je šestiúhelník', o1.length === 6);
+ok('vrcholy jsou souřadnice', o1.every(function (b) {
+  return Number.isFinite(b[0]) && Number.isFinite(b[1])
+    && b[0] >= -90 && b[0] <= 90 && b[1] >= -180 && b[1] <= 180;
+}));
+ok('obrys cizího klíče nevznikne', S.obrys('cz:sumperk') === null && S.obrys(null) === null);
+// Střed buňky musí padnout zpátky do téže buňky — jinak by odznak území
+// seděl jinde, než území je.
+const st = S.stred(k1);
+ok('střed padne zpátky do své buňky', S.klicBodu(st.lat, st.lon) === k1);
+ok('a leží uvnitř obrysu',
+  st.lat > Math.min.apply(null, o1.map(function (b) { return b[0]; }))
+  && st.lat < Math.max.apply(null, o1.map(function (b) { return b[0]; })));
 
-// Hranice z OSM má tisíce bodů. Na mapě v telefonu je to k nerozeznání od
-// stovky a jen by se to vleklo po drátě.
-const kruh = [];
-for (let i = 0; i < 900; i++) {
-  const a = i / 900 * 2 * Math.PI;
-  kruh.push([50 + Math.sin(a) * 0.3, 17 + Math.cos(a) * 0.45]);
-}
-const zj = box.zjednodus(kruh, 160);
-ok('obrys se zjednoduší', zj.length <= 160 && zj.length >= 8, '— ' + zj.length + ' z ' + kruh.length);
-ok('a pořád je to polygon, ne čára', zj.length >= 4);
-ok('krátký obrys se nechá být', box.zjednodus([[1, 1], [2, 2], [3, 1]], 160).length === 3);
-ok('prázdno nic neshodí', box.zjednodus(null, 160).length === 0);
+// ─── Sousedé ─────────────────────────────────────────────────────────────────
+const sous = S.sousedniKlice(k1);
+ok('sousedů je šest', sous.length === 6, '— ' + sous.length);
+ok('mezi sousedy není ona sama', sous.indexOf(k1) < 0);
+ok('a žádný dvakrát', new Set(sous).size === sous.length);
+ok('sousedství platí oběma směry',
+  sous.every(function (k) { return S.sousedniKlice(k).indexOf(k1) >= 0; }));
+ok('soused je zase buňka naší sítě', sous.every(S.jeKlic));
+ok('cizí klíč sousedy nemá', S.sousedniKlice('cz:sumperk').length === 0);
+// Blízká města padnou do jedné buňky nebo do sousední, vzdálená nikdy.
+(function () {
+  const sumperk = k1;
+  const blizko = S.klicBodu(49.98, 17.00);          // pár kilometrů
+  const daleko = S.klicBodu(50.0875, 14.4213);      // Praha
+  ok('pár kilometrů je táž nebo sousední buňka',
+    blizko === sumperk || sous.indexOf(blizko) >= 0);
+  ok('dvě stě kilometrů už ne', daleko !== sumperk && sous.indexOf(daleko) < 0);
+}());
+
+// ─── Jméno a obyvatelé ───────────────────────────────────────────────────────
+const mesta = [{ name: 'Šumperk', population: 25000 },
+  { name: 'Zábřeh', population: 13000 }, { name: 'Bez údaje', population: null }];
+ok('území se jmenuje po největším městě', S.nejvetsi(mesta).name === 'Šumperk');
+ok('obyvatelé jsou součet známých měst', S.soucetObyvatel(mesta) === 38000);
+ok('bez měst není počet nula, ale nic', S.soucetObyvatel([]) === null);
+ok('prázdno nic neshodí',
+  S.nejvetsi(null) === null && S.soucetObyvatel(null) === null
+  && S.nejvetsi([null, {}]) !== undefined);
+
+// ─── Nic se nestahuje ────────────────────────────────────────────────────────
+// Jedna cizí služba na čtecí cestě stačila na to, aby panel Unie visel na
+// „Načítám…". Do území se žádná vrátit nesmí.
+const Z = cti('services/game/okresy.js');
+const SITZ = cti('services/game/sit.js');
+ok('území se na nic po síti neptá',
+  Z.indexOf('openstreetmap') < 0 && Z.indexOf('overpass') < 0 && Z.indexOf('fetch(') < 0);
+ok('ani geometrie', SITZ.indexOf('fetch(') < 0 && SITZ.indexOf('http') < 0);
+ok('hledání hranice podle jména v kódu NENÍ', Z.indexOf('najdiHranici') < 0);
+
+// ─── Převod toho, co běží ────────────────────────────────────────────────────
+// Pořadí je celé pravidlo: území se musí převést DŘÍV, než se městům
+// přepočítají klíče — staré území se k městu dohledává právě přes ten starý
+// klíč. Opačně by se nenašlo žádné a všem by území zmizela.
+ok('převod jde přes území a teprve pak přes města',
+  Z.indexOf('gameTerritory.findMany') < Z.indexOf('Teprve teď města'));
+ok('území se k městu dohledá přes starý klíč',
+  /OR: \[\{ key: t\.okres_key \}, \{ okres_key: t\.okres_key \}\]/.test(Z));
+ok('licence jdou s územím', /gameOperatorLicence\.updateMany\([\s\S]{0,160}okres_key: key/.test(Z));
+ok('převod nepřepíše cizí území',
+  /obsazeno && obsazeno\.id !== t\.id/.test(Z));
+ok('a běží jen jednou', /if \(PREVEDENO\) return 0;/.test(Z));
+ok('na čtecí cestě se na převod nečeká',
+  /Promise\.resolve\(\)\.then\(prevedStaraUzemi\)/.test(Z));
 
 // ─── Zábory se hledají přes města ────────────────────────────────────────────
-// Zábor nese MĚSTO, území OKRES. Kdyby se zábory hledaly rovnou podle klíče
-// okresu, nenašel by se ani jeden a všechno by tiše vycházelo nula.
+// Zábor nese MĚSTO, území BUŇKU. Kdyby se zábory hledaly rovnou podle klíče
+// území, nenašel by se ani jeden a všechno by tiše vycházelo nula.
 const U = cti('services/game/unie.js');
-ok('vyúčtování překládá okres na města',
+ok('vyúčtování překládá území na města',
   /const klice = await OKRESY\.oblasti\(t\.okres_key\);[\s\S]{0,400}area_key: \{ in: klice \}/.test(U));
 ok('přehled území taky',
   /const kliceO = await OKRESY\.oblasti\(t\.okres_key\);[\s\S]{0,400}area_key: \{ in: kliceO \}/.test(U));
-ok('počítání strojů v okrese taky',
+ok('počítání strojů v území taky',
   /async function pocetVOkrese\(okresKey\) \{[\s\S]{0,300}area_key: \{ in: klice \}/.test(U));
-ok('žebříček si drží překlad město→okres',
+ok('žebříček si drží překlad město→území',
   /okresMesta = new Map\(mesta\.map/.test(U) && /podleOkresu\[t\.okres_key\]/.test(U));
-ok('a nikde se zábor nehledá podle klíče okresu',
+ok('a nikde se zábor nehledá podle klíče území',
   !/area_key: t\.okres_key/.test(U) && !/area_key: \{ in: uzemi\.map/.test(U));
-ok('potenciál sčítá místa celého okresu',
+ok('potenciál sčítá místa celého území',
   /prisma\.gameArea\.findMany\(\{ where: \{ okres_key: key \}/.test(U));
 
 // ─── Mapa ────────────────────────────────────────────────────────────────────
 const R = cti('routes/game-unie.routes.js');
 ok('mapa posílá hranici', /hranice: Array\.isArray\(o\.hranice\) \? o\.hranice : null/.test(R));
-ok('a chybějící hranici dotahuje NA POZADÍ',
-  /OKRESY\.zajistiNaPozadi\(k, mam && mam\.nazev/.test(R));
-// Tohle je ta past, na které přehled Unie jednou uvízl na „Načítám…":
-// při každém pohledu se znovu čekalo na cizí službu. Čtecí cesta nesmí
-// na stahování čekat vůbec.
-ok('čtecí cesta na stahování nečeká',
-  !/await OKRESY\.zajisti\(/.test(R) && !/await OKRESY\.prevedStaraUzemi\(/.test(R)
-  && !/await OKRESY\.proOblast\(/.test(R));
-ok('stará území se převedou na okresy, taky na pozadí',
-  /OKRESY\.prevodNaPozadi\(\)/.test(R));
-// A v samotném modulu: po neúspěchu se nezkouší hned znovu, jinak by každé
-// načtení stránky znamenalo dotaz na cizí službu.
-ok('mezi pokusy je pauza', /const POKUS_PAUZA = /.test(Z)
-  && /Date\.now\(\) - kdy < POKUS_PAUZA/.test(Z));
-ok('práce na pozadí se nečeká', /Promise\.resolve\(\)\.then\(prace\)/.test(Z));
-ok('a pro okres k městu je zvlášť cesta, která si počká',
-  /async function proOblastTed\(area\)/.test(Z));
-ok('převod nepřepíše cizí území',
-  /obsazeno[\s\S]{0,200}console\.warn\('\[game\] unie — území'/.test(Z));
+ok('chybějící řádek území se rovnou založí',
+  /for \(const k of chybi\) await OKRESY\.zajisti\(k, null, null\)/.test(R));
+ok('stará území se převádějí na pozadí', /OKRESY\.prevodNaPozadi\(\)/.test(R));
 
 const hra = cti('public/compounder/game/game.js');
 ok('hra kreslí polygon', /L\.polygon\(u\.hranice, styl\)/.test(hra));
-// Bez náhradního kruhu by prázdná mapa vypadala jako chyba hry.
+// Bez náhradního kruhu by nepřevedené území z mapy zmizelo úplně.
 ok('a bez hranice zůstane kruh', /L\.circle\(\[u\.lat, u\.lon\], Object\.assign\(\{ radius: UZEMI_R \}/.test(hra));
 ok('polygon se kreslí jen z pořádného obrysu', /u\.hranice\.length >= 4/.test(hra));
 
-// Obrys se musí vzít z objektu, který ten bod OBSAHUJE. Hledání podle jména
-// vracelo u „Šumperk" město Šumperk a na mapě svítila obec místo okresu —
-// dvakrát po sobě. Ta cesta je pryč a vrátit se nesmí.
-ok('okres si nese obrys z reverse',
-  /polygon_geojson=1&lat=/.test(Z) && /hranice: body && body\.length >= 4/.test(Z));
-ok('hledání hranice podle jména v kódu NENÍ', Z.indexOf('najdiHranici') < 0);
-ok('a katalog se podle jména neptá vůbec',
-  Z.indexOf('nominatim.openstreetmap.org/search') < 0);
-// Když reverse vrátí obec, ale jméno je okresní, obrys patří obci. Takový se
-// zahodí: okres nakreslený jako město je horší než poctivý kruh.
-ok('obec vydávaná za okres se nebere', /const obecMistoOkresu = !!zOkresu/.test(Z)
-  && /let body = obecMistoOkresu \? null : prstenec\(j\.geojson\)/.test(Z));
-ok('a nedoptává se na její geometrii ani podle osm_id',
-  /if \(!obecMistoOkresu && \(!body \|\| body\.length < 4\)/.test(Z));
-// U uloženého obrysu je vidět, odkud je — bez toho se čtyřikrát hádalo.
-ok('obrys si nese zdroj', /zdroj: 'overpass:'/.test(Z) && /zdroj: 'nominatim:'/.test(Z));
-ok('a ukládá se s ním', /zdroj: \(h && h\.hranice && h\.zdroj\)/.test(Z));
-ok('nalezený okres se rovnou uloží i s hranicí', /zajisti\(o\.key, o\.nazev, o\.zeme, o\)/.test(Z));
-
-// Okres je víc než jedno město a nemá stát stejně. Volná místa znají jen tu
-// část okresu, kterou někdo prozkoumal — počet obyvatel platí i pro zbytek.
-const U2 = cti('services/game/unie.js');
-ok('licence počítá i z obyvatel okresu',
-  /licence_za_obyvatele/.test(U2) && /Math\.round\(obyvatel \* \(nast\.licence_za_obyvatele/.test(U2));
+// ─── Licence ─────────────────────────────────────────────────────────────────
+// Území je víc než jedno město a nemá stát stejně. Volná místa zná hra jen
+// z té části, kterou někdo prozkoumal — počet obyvatel platí i pro zbytek.
+ok('licence počítá i z obyvatel území',
+  /licence_za_obyvatele/.test(U) && /Math\.round\(obyvatel \* \(nast\.licence_za_obyvatele/.test(U));
 ok('a bere to vyšší z obou měřítek, ne součet',
-  /const cena = Math\.max\(nast\.licence_min,[\s\S]{0,200}licence_za_obyvatele/.test(U2));
-ok('počet obyvatel se u okresu drží', /obyvatel   Int\?/.test(cti('prisma/schema.prisma')));
-ok('a tahá se z OSM', /function pocetObyvatel\(x\)/.test(Z) && /extratags=1/.test(Z));
-// Jméno není identita: doptat se musí podle osm_id toho objektu, který
-// reverse vrátil, ne podle textu „okres Šumperk".
-ok('obrys se doptává podle osm_id', /function lookup\(osmType, osmId\)/.test(Z)
-  && /osm_ids=' \+ p \+ encodeURIComponent\(osmId\)/.test(Z)
-  && /body\.length < 4\) && j\.osm_type && j\.osm_id\) \{[\s\S]{0,200}await lookup\(j\.osm_type, j\.osm_id\)/.test(Z));
-ok('a chybějící obrys se dohledá přes město okresu',
-  /najdiOkres\(mesto\.lat, mesto\.lon, mesto\.country\)/.test(Z));
-// Overpass se ptá rovnou na hranici, která ten bod obsahuje. Nominatim je
-// geokodér: umí jméno, ale obrys z něj chodí nespolehlivě — a jméno není
-// identita, hledání „okres Šumperk" trefilo město Šumperk.
-ok('hranice se tahá z Overpassu', /function okresOverpass\(lat, lon, zemeHint\)/.test(Z)
-  && /is_in\(' \+ Number\(lat\)/.test(Z));
-ok('a Nominatim je až záloha',
-  /const op = await okresOverpass\(lat, lon, zemeHint\)[\s\S]{0,120}if \(op && op\.key && op\.hranice\) return op;/.test(Z));
-ok('bere se nižší správní úroveň', /rely\.sort\(\(a, b\) => Number\(a\.tags\.admin_level/.test(Z));
-ok('a jen vnější okraj relace', /!m\.role \|\| m\.role === 'outer'/.test(Z));
-ok('kusy relace se sešívají', /const obrys = sesij\(casti\);/.test(Z));
-ok('když ani to nevyjde, je to vidět v logu', /hranice se nestáhla/.test(Z));
-
-// Hranice chodí z Overpassu po kouscích a v náhodném pořadí. Bez sešití by
-// z obrysu byla hvězdice — čáry by skákaly křížem krážem.
-const ses = Z.match(/function sesij\(casti\) \{[\s\S]*?\n\}/);
-ok('v okresy.js se našlo: sesij', !!ses);
-if (ses) {
-  const b2 = { Math: Math };
-  vm.createContext(b2);
-  vm.runInContext(ses[0], b2);
-  const h = [[0, 0], [0, 1]], p = [[1, 1], [0, 1]], d = [[1, 1], [1, 0]], l = [[1, 0], [0, 0]];
-  const kruh2 = b2.sesij([p, l, h, d]);
-  ok('kusy se sešijí do kruhu', kruh2.length === 5, '— ' + kruh2.length + ' bodů');
-  ok('a konec navazuje na začátek',
-    kruh2[0][0] === kruh2[kruh2.length - 1][0] && kruh2[0][1] === kruh2[kruh2.length - 1][1],
-    '— ' + JSON.stringify([kruh2[0], kruh2[kruh2.length - 1]]));
-  ok('obrácený kus se otočí', b2.sesij([h, p]).length === 3);
-  ok('kus, co nenavazuje, se nepřilepí', b2.sesij([h, [[9, 9], [9, 8]]]).length === 2);
-  ok('prázdno nic neshodí', b2.sesij([]).length === 0);
-}
-
-const schema = cti('prisma/schema.prisma');
-ok('schéma zná okresy', /model GameOkres \{/.test(schema));
-ok('území se klíčuje okresem', /okres_key  String   @unique @map\("area_key"\)/.test(schema));
-ok('a licence taky', /okres_key  String   @map\("area_key"\)/.test(schema));
-ok('město si pamatuje svůj okres', /okres_key   String\?  @db\.VarChar\(80\)/.test(schema));
+  /const cena = Math\.max\(nast\.licence_min,[\s\S]{0,200}licence_za_obyvatele/.test(U));
+ok('počet obyvatel se u území drží', /obyvatel   Int\?/.test(cti('prisma/schema.prisma')));
 
 console.log(chyb ? '\n' + chyb + ' nesedí' : '\nvšechno sedí');
 process.exit(chyb ? 1 : 0);

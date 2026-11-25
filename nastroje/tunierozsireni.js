@@ -1,16 +1,18 @@
-// Rozšiřování území o sousední okresy.
+// Rozšiřování území o sousední buňky.
 //
 // Území šlo vzít jen tam, kde už hráč sám stavěl — pozdní hra tím končila
-// u vlastní sítě a růst se nedal plánovat. Okres má hranici, takže jde
-// nakreslit i to, co je vedle, a dát k tomu plus.
+// u vlastní sítě a růst se nedal plánovat. Buňka sítě má šest sousedů, takže
+// jde nakreslit i to, co je vedle, a dát k tomu plus.
 //
-// Dvě věci se tu musí držet, obě o cizím majetku a cizích penězích:
-// území si smíš vzít jen tam, kam dosáhneš servisem (pobočka, sídlo, nebo
-// už tam stavíš), a sousedé se nehledají znovu a znovu — je to dvanáct
-// dotazů na cizí službu zdarma.
+// Dřív se sousedé pracně hledali: kolem obrysu se sáhlo dvanácti směry ven
+// a cizí služby se zeptalo, co tam je. Teď je to prostě šest sousedních
+// buněk — žádné dotazování, žádná pauza mezi dotazy, žádné „zatím nevím".
+//
+// Co se tu pořád musí držet, je to o cizím majetku a cizích penězích: území
+// si smíš vzít jen tam, kam dosáhneš servisem — pobočka, sídlo, nebo už tam
+// stavíš.
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
 
 let chyb = 0;
 function ok(co, podminka, detail) {
@@ -23,42 +25,20 @@ const Z = cti('services/game/okresy.js');
 const R = cti('routes/game-unie.routes.js');
 const hra = cti('public/compounder/game/game.js');
 
-// ─── Kam se sáhne pro souseda ────────────────────────────────────────────────
-const kusy = ['tezisteObrysu', 'bodVen'].map(function (jm) {
-  const m = Z.match(new RegExp('function ' + jm + '\\([\\s\\S]*?\\n\\}'));
-  ok('v okresy.js se našlo: ' + jm, !!m);
-  return m ? m[0] : '';
-});
-const box = { SMERU: 12, VEN_KM: 6 };
-vm.createContext(box);
-vm.runInContext(kusy.join('\n'), box);
-
-// Čtverec 1° × 1° se středem v 50,17.
-const ctverec = [[49.5, 16.5], [50.5, 16.5], [50.5, 17.5], [49.5, 17.5]];
-const stred = box.tezisteObrysu(ctverec);
-ok('těžiště sedí doprostřed', Math.abs(stred[0] - 50) < 1e-9 && Math.abs(stred[1] - 17) < 1e-9,
-  '— ' + JSON.stringify(stred));
-
-// Bod na sever musí ležet VEN z obrysu, jinak by se hra zeptala sama sebe
-// a souseda nikdy nenašla.
-const sever = box.bodVen(ctverec, stred, 0);
-ok('bod na sever je za hranicí', sever && sever[0] > 50.5, '— ' + JSON.stringify(sever));
-const vychod = box.bodVen(ctverec, stred, Math.PI / 2);
-ok('bod na východ je za hranicí', vychod && vychod[1] > 17.5, '— ' + JSON.stringify(vychod));
-const jih = box.bodVen(ctverec, stred, Math.PI);
-ok('a na jih taky', jih && jih[0] < 49.5, '— ' + JSON.stringify(jih));
-ok('ve směru, kde obrys nic nemá, se nic nevymýšlí',
-  box.bodVen([[50, 17]], [50, 17], 0) === null);
-
-// ─── Sousedé se hledají jednou ───────────────────────────────────────────────
-ok('uložení sousedé se čtou z databáze',
-  /if \(Array\.isArray\(o\.sousedi\) && o\.sousedi\.length\) return o\.sousedi;/.test(Z));
-ok('a po hledání se uloží', /data: \{ sousedi: klice \}/.test(Z));
-ok('mezi dotazy je pauza', /setTimeout\(r, 1100\)/.test(Z));
-ok('sám sebe za souseda nepovažuje', /n\.key !== key/.test(Z));
-ok('a nalezený soused se rovnou uloží i s obrysem',
-  /zajisti\(n\.key, n\.nazev, n\.zeme, n\)/.test(Z));
-ok('bez obrysu se sousedi nehledají', /if \(!body \|\| body\.length < 4\) return \[\];/.test(Z));
+// ─── Sousedé ─────────────────────────────────────────────────────────────────
+// Šest sousedních buněk, spočítaných, ne hledaných. Vlastnosti sítě hlídá
+// tokresy.js; tady jde o to, že se sousedé uloží a že se rovnou založí jejich
+// řádky — bez nich by hráč klikl na „+" a nenašel tam nic.
+const S = require('../services/game/sit');
+const UKAZKA = S.klicBodu(49.9653, 16.9706);
+ok('soused se počítá, nehledá', S.sousedniKlice(UKAZKA).length === 6);
+ok('sousedi se ukládají k území', /sousedi: sousedniKlice\(key\)/.test(Z));
+ok('a jejich řádky se rovnou založí',
+  /for \(const k of klice\) await zajisti\(k, null, null\)/.test(Z));
+ok('sám sebe za souseda nepovažuje', /\(k\) => k !== key/.test(cti('services/game/sit.js')));
+// Po síti se kvůli sousedům nikam nesahá — tohle bývalo dvanáct dotazů na
+// cizí službu s vteřinovou pauzou mezi nimi.
+ok('žádná pauza mezi dotazy už není potřeba', Z.indexOf('setTimeout(r, 1100)') < 0);
 
 // ─── Kam dosáhnu servisem ────────────────────────────────────────────────────
 // Bez tohohle by šlo skoupit půl republiky od stolu a servis by v těch

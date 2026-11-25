@@ -682,60 +682,61 @@
         .then(function (r) { return r.json(); }).then(function () { loadUniePravidla(); })
         .catch(function (er) { alert('Chyba: ' + er.message); });
     });
-    // Okresy: co má který uložené a jestli se stáhla hranice. Mapa bez hranice
-    // mlčky nakreslí kruh a z hry se nepozná, kde se to láme — tohle to ukáže.
+    // Území Unie: co má která buňka uložené. Hranice se počítá ze souřadnic,
+    // takže tu není co stahovat — tlačítko jen přepočítá jméno, obyvatele
+    // a obrys z toho, co hra o městech ví.
     function loadOkresy() {
       get('/okresy').then(function (j) {
         var l = j.okresy || [];
+        var nepr = j.neprevedeno || [];
         var radky = l.length
           ? '<div class="tbl-wrap" style="margin-top:8px"><table class="data-table"><thead><tr>'
-            + '<th>Okres</th><th>Název</th><th class="num">Obyvatel</th><th class="num">Bodů hranice</th>'
-            + '<th>Odkud</th><th class="num">Sousedů</th><th></th></tr></thead><tbody>'
+            + '<th>Buňka</th><th>Název</th><th>Drží</th><th class="num">Obyvatel</th>'
+            + '<th class="num">km²</th><th class="num">Vrcholů</th><th class="num">Sousedů</th>'
+            + '</tr></thead><tbody>'
             + l.map(function (o) {
                 var ma = o.hranice_bodu >= 4;
-                return '<tr><td><b>' + esc(o.key) + '</b></td><td>' + esc(o.nazev || '—') + '</td>'
+                return '<tr><td><b>' + esc(o.key) + '</b>'
+                  + (o.sit ? '' : ' <span style="color:#f87171">starý okres</span>') + '</td>'
+                  + '<td>' + esc(o.nazev || '—') + '</td>'
+                  + '<td>' + esc(o.drzi || '—') + '</td>'
                   + '<td class="num">' + (o.obyvatel ? cz(o.obyvatel) : '—') + '</td>'
+                  + '<td class="num">' + (o.plocha_km2 ? cz(o.plocha_km2) : '—') + '</td>'
                   + '<td class="num" style="color:' + (ma ? '#22c55e' : '#f87171') + '">'
                   + o.hranice_bodu + (ma ? '' : ' — kreslí se kruh') + '</td>'
-                  + '<td class="note">' + esc(o.zdroj || '—') + '</td>'
-                  + '<td class="num">' + o.sousedu + '</td>'
-                  + '<td><button class="btn sm" data-okresznovu="' + esc(o.key) + '">Stáhnout hranici</button></td></tr>';
+                  + '<td class="num">' + o.sousedu + '</td></tr>';
               }).join('') + '</tbody></table></div>'
-          : '<p class="note" style="margin:8px 0 0">Zatím žádný okres.</p>';
+          : '<p class="note" style="margin:8px 0 0">Zatím žádné území.</p>';
         document.getElementById('st-okresy').innerHTML =
-          '<h4 style="font-size:13px;margin:0 0 6px">Okresy (území Unie)</h4>'
-          + '<p class="note" style="margin:0">Bez hranice nakreslí mapa kolem středu kruh. Tlačítkem se hranice zkusí stáhnout znovu a vypíše se, který zdroj odpověděl.</p>'
-          + radky + '<pre id="st-okresy-log" class="note" style="white-space:pre-wrap;margin-top:10px"></pre>';
+          '<h4 style="font-size:13px;margin:0 0 6px">Území Unie</h4>'
+          + '<p class="note" style="margin:0">Území je buňka šestiúhelníkové sítě o velikosti zhruba okresu'
+          + ' (stupeň ' + (j.velikost || '?') + '). Počítá se ze souřadnic, nic se nestahuje.</p>'
+          + (nepr.length
+            ? '<p class="note" style="color:#f87171;margin:6px 0 0">Ještě nepřevedeno ze starého okresu: '
+              + nepr.map(function (x) { return esc(x.key) + ' (' + esc(x.master || '?') + ')'; }).join(', ')
+              + '</p>'
+            : '')
+          + '<div style="margin-top:8px"><button class="btn sm" data-okresznovu="1">Přepočítat všechna</button>'
+          + (nepr.length ? ' <button class="btn sm" data-okresprevest="1">Převést stará území</button>' : '')
+          + '</div><pre id="st-okresy-log" class="note" style="white-space:pre-wrap;margin-top:10px"></pre>';
       }).catch(function (e) { chyba('st-okresy', e); });
     }
     document.addEventListener('click', function (e) {
-      var b = e.target.closest && e.target.closest('[data-okresznovu]'); if (!b) return;
+      var b = e.target.closest && (e.target.closest('[data-okresznovu]') || e.target.closest('[data-okresprevest]'));
+      if (!b) return;
+      var prevest = !!b.getAttribute('data-okresprevest');
       var log = document.getElementById('st-okresy-log');
       b.disabled = true;
-      if (log) log.textContent = 'Stahuji… (Overpass má na odpověď až 45 s)';
-      get('/okresy?znovu=1&klic=' + encodeURIComponent(b.getAttribute('data-okresznovu')))
+      if (log) log.textContent = prevest ? 'Převádím…' : 'Přepočítávám…';
+      get('/okresy?' + (prevest ? 'prevest=1' : 'znovu=1'))
         .then(function (j) {
           b.disabled = false;
-          var z = j.znovu || {};
-          var radky = ['okres ' + (z.key || '?')
-            + (z.ulozeno ? ' — HRANICE ULOŽENA (' + z.nasel_bodu + ' bodů)' : ' — hranice se nestáhla')];
-          (z.overpass || []).forEach(function (o) {
-            var v = o.vzorek;
-            radky.push('overpass ' + o.url.replace(/^https?:\/\//, '').split('/')[0]
-              + ' · ' + o.ms + ' ms · stav ' + (o.stav == null ? 'bez odpovědi' : o.stav)
-              + (o.chyba ? ' · chyba: ' + o.chyba : '')
-              + ' · relací ' + o.relaci
-              + (v ? ' · ' + (v.nazev || '?') + ' (level ' + v.admin_level + ', členů ' + v.clenu
-                  + ', cest s geometrií ' + v.cest_s_geometrii + ', sešito ' + v.sesito_bodu + ' bodů)' : ''));
-          });
-          var n = z.nominatim;
-          if (n) {
-            radky.push('nominatim · ' + n.ms + ' ms · stav ' + (n.stav == null ? 'bez odpovědi' : n.stav)
-              + (n.chyba ? ' · chyba: ' + n.chyba : '')
-              + ' · ' + (n.nazev || 'bez názvu') + ' · ' + (n.osm || 'bez osm') + ' · bodů ' + n.bodu);
+          var bez = (j.okresy || []).filter(function (o) { return o.hranice_bodu < 4; });
+          if (log) {
+            log.textContent = 'Hotovo. Území: ' + (j.okresu || 0)
+              + ', bez hranice: ' + bez.length
+              + ', nepřevedených: ' + ((j.neprevedeno || []).length);
           }
-          if (z.chyba) radky.push(z.chyba);
-          if (log) log.textContent = radky.join('\n');
           loadOkresy();
         }).catch(function (er) { b.disabled = false; if (log) log.textContent = 'Chyba: ' + er.message; });
     });

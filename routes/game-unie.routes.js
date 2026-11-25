@@ -145,15 +145,18 @@ router.get('/unie/mapa', requirePlayer, jenUnie, async (req, res, next) => {
       select: { okres_key: true, master_id: true, master_nick: true, poplatek_pct: true, nespokojenost: true },
     });
     if (!uzemi.length) return res.json({ ok: true, uzemi: [] });
-    // Hranice okresu. Chybí-li, spustí se stahování NA POZADÍ a odpoví se tím,
-    // co v databázi je — mapa zatím nakreslí kolem středu kruh. Čekat tady na
-    // cizí službu znamená panel, který se nenačte: přesně na tom přehled Unie
-    // jednou uvízl na „Načítám…".
+    // Hranice území. Buňka se počítá, takže chybějící řádek se rovnou založí —
+    // nic se nestahuje a na nic se nečeká. Kruh kolem středu už mapa kreslí
+    // jen u území, které se ještě nepřevedlo ze starého okresu.
     const klice = uzemi.map((t) => t.okres_key);
-    const okresy = await prisma.gameOkres.findMany({ where: { key: { in: klice } } }).catch(() => []);
-    for (const k of klice) {
+    let okresy = await prisma.gameOkres.findMany({ where: { key: { in: klice } } }).catch(() => []);
+    const chybi = klice.filter((k) => {
       const mam = okresy.find((o) => o.key === k);
-      if (!mam || !mam.hranice) OKRESY.zajistiNaPozadi(k, mam && mam.nazev, mam && mam.zeme);
+      return !mam || !Array.isArray(mam.hranice) || mam.hranice.length < 4;
+    });
+    if (chybi.length) {
+      for (const k of chybi) await OKRESY.zajisti(k, null, null).catch(() => {});
+      okresy = await prisma.gameOkres.findMany({ where: { key: { in: klice } } }).catch(() => []);
     }
     const mapa = {};
     okresy.forEach((o) => { mapa[o.key] = o; });

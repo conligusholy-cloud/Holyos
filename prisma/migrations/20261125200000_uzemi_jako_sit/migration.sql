@@ -1,0 +1,16 @@
+-- Území Unie přestává být správní okres a stává se buňkou pravidelné sítě.
+--
+-- Důvod: hra se hraje po celém světě a správní členění srovnatelné s okresem
+-- všude není. A to, co se stahovat dalo, z produkce stáhnout nešlo — na mapě
+-- zůstával kruh, a když se hra o hranici pokusila podle jména, dostala místo
+-- okresu stejnojmenné město.
+--
+-- Buňka se počítá ze souřadnic, má kolem 1 500 km² (český okres má v průměru
+-- 1 000) a platí všude stejně. Klíč území je index buňky.
+--
+-- Samotný převod běžících území dělá services/game/okresy.js při prvním
+-- dotazu: SQL neumí spočítat, do které buňky město patří. Tady se jen zahodí
+-- to, co by převodu překáželo — uložené obrysy okresů a jejich sousedé.
+-- Území a licence si klíč nechávají, dokud je převod nepřepíše; podle toho
+-- se taky pozná, co ještě převést zbývá.
+UPDATE "game_okresy" SET "hranice" = NULL, "sousedi" = NULL, "zdroj" = NULL;
