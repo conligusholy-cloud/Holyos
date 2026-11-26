@@ -4309,9 +4309,16 @@ function unieSousedPobocka(n) {
   var vse = n.mesta || [];
   var znam = vse.filter(function (m) { return S.areas && S.areas[m.key]; });
   if (!znam.length) {
-    return vse.length
-      ? '<p class="fine">' + esc(tx('veta.unie_soused_prozkoumej', { p1: vse[0].name })) + '</p>'
-      : '';
+    // Žádné město tu hráč neprozkoumal. Posílat ho hledat ho na mapu je ta
+    // samá zbytečná cesta — tlačítko otevře hledání s předvyplněným městem,
+    // takže zbývá jedno klepnutí.
+    if (!vse.length) return '';
+    return '<p class="fine">' + esc(tx('veta.unie_soused_prozkoumej', { p1: SCOUT_COST })) + '</p>'
+      + '<div class="gcard-act">' + vse.slice(0, 3).map(function (m) {
+          return '<button class="btn sec sm" data-sous-scout="' + esc(m.name) + '"'
+            + (S.cash < SCOUT_COST ? ' disabled' : '') + '>'
+            + esc(tx('unie.soused_prozkoumat', { p1: m.name })) + '</button>';
+        }).join('') + '</div>';
   }
   return '<p class="fine">' + esc(tx('veta.unie_soused_pobocka_cena',
       { p1: POBOCKA_CENA, p2: POBOCKA_MESICNE })) + '</p>'
@@ -4341,6 +4348,11 @@ function unieSousedSheet(n) {
       ? '<button class="btn big" id="sous-ok" style="width:100%;margin-top:10px">'
         + esc(tx('unie.rozsirit')) + ' · ' + kcFull(cena) + '</button>'
       : ''));
+  // Prozkoumat město odsud: otevře se hledání s předvyplněným městem, ať
+  // hráč nemusí na mapě hledat, kde Bruntál vlastně je.
+  [].forEach.call(($('sheet-body') || document).querySelectorAll('[data-sous-scout]'), function (t) {
+    t.onclick = function () { areasSheet(t.getAttribute('data-sous-scout')); };
+  });
   // Zřízení pobočky rovnou z karty souseda. Platí se stejně jako v síti,
   // jen se pak znovu načtou sousedé — s pobočkou už jde území vzít.
   [].forEach.call(($('sheet-body') || document).querySelectorAll('[data-sous-pob]'), function (t) {

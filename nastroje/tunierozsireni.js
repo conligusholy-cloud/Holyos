@@ -70,6 +70,15 @@ ok('a bez peněz je tlačítko zhasnuté',
   /S\.cash < POBOCKA_CENA \? ' disabled' : ''/.test(usekPob));
 ok('je na něm vidět, co to stojí teď i měsíčně',
   /veta\.unie_soused_pobocka_cena[\s\S]{0,120}POBOCKA_CENA, p2: POBOCKA_MESICNE/.test(usekPob));
+// Bez prozkoumaného města pobočku založit nejde — a posílat hráče hledat to
+// město na mapě je ta samá zbytečná cesta. Tlačítko otevře hledání
+// s předvyplněným městem.
+ok('neprozkoumané město jde prozkoumat odsud', /data-sous-scout=/.test(usekPob));
+ok('a bez peněz na cestu je i to tlačítko zhasnuté',
+  /S\.cash < SCOUT_COST \? ' disabled' : ''/.test(usekPob));
+ok('otevře hledání s předvyplněným městem',
+  /areasSheet\(t\.getAttribute\('data-sous-scout'\)\)/.test(hra));
+ok('a je u toho cena cesty', /veta\.unie_soused_prozkoumej', \{ p1: SCOUT_COST \}/.test(usekPob));
 // Server o pobočce ví až po uložení stavu — bez nového natažení by karta dál
 // tvrdila, že tam pobočku nemáš, a tlačítko „Rozšířit" by se neobjevilo.
 ok('po zřízení se sousedé natáhnou znovu',
