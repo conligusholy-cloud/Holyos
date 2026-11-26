@@ -41,15 +41,22 @@ const kusy = [
 if (chyb) { console.log('\n' + chyb + ' nesedí'); process.exit(1); }
 // Okolí, které kreslení potřebuje. Formátování peněz tu nehraje roli,
 // takže stačí, aby číslo prošlo tak, jak je.
-const box = { esc: (x) => String(x), tx: (k) => k, kcFull: (n) => String(Math.round(n)) };
+const box = { esc: (x) => String(x), tx: (k) => k, kcFull: (n) => String(Math.round(n)),
+  AKCIE_GRAF_ID: 0 };
 vm.createContext(box);
 vm.runInContext(kusy.join('\n'), box);
 const krivka = box.akcieKrivka, sipka = box.akcieSipka;
 
 // ─── Křivka ──────────────────────────────────────────────────────────────────
 const body = (ceny) => ceny.map((c, i) => ({ kdy: '2026-11-0' + (i + 1), cena: c }));
+// Pozor na pořadí: plocha pod čarou se kreslí PŘED čarou, takže první
+// points= v dokumentu je ona. Čára se bere jmenovitě.
 const souradnice = (svg) => {
-  const m = svg.match(/points="([^"]+)"/);
+  const m = svg.match(/<polyline points="([^"]+)"/);
+  return m ? m[1].split(' ').map((p) => p.split(',').map(Number)) : [];
+};
+const plochaZ = (svg) => {
+  const m = svg.match(/<polygon points="([^"]+)"/);
   return m ? m[1].split(' ').map((p) => p.split(',').map(Number)) : [];
 };
 const vyskaZ = (svg) => Number((svg.match(/viewBox="0 0 \d+ (\d+)"/) || [])[1]);
@@ -76,8 +83,40 @@ souradnice(rovne).forEach((b, i) => {
 // Malý graf na kartě burzy je nižší, ale jinak stejný.
 const m = krivka(body([100000, 101500, 99000]), true);
 ok('malý graf je nižší', vyskaZ(m) < vyskaZ(g));
-ok('a pozná se podle třídy', /class="fond-graf graf-maly"/.test(m));
+ok('a pozná se podle třídy', /class="akcie-graf [a-z]+ graf-maly"/.test(m));
 ok('velký tu třídu nemá', !/graf-maly/.test(g));
+
+// ─── Jak graf vypadá ─────────────────────────────────────────────────────────
+// Samotná tenká linka v tmavé kartě vypadala jako čárka tužkou. Pod čarou je
+// plocha, která se dolů vytrácí.
+ok('pod čarou je plocha', /<polygon points="[^"]+" fill="url\(#akg\d+\)"\/>/.test(g));
+const pl = plochaZ(g);
+const vys = vyskaZ(g);
+ok('plocha je zavřená dolů na obou koncích',
+  pl.length === souradnice(g).length + 2 && pl[0][1] === vys && pl[pl.length - 1][1] === vys);
+ok('a začíná i končí pod krajními body čáry',
+  pl[0][0] === souradnice(g)[0][0] && pl[pl.length - 1][0] === souradnice(g)[souradnice(g).length - 1][0]);
+// Přechod se odkazuje přes id. Na jedné obrazovce jich visí vedle sebe pět —
+// se stejným id by si všechny vzaly barvu toho prvního.
+const a = krivka(body([100000, 101000]), true), b2 = krivka(body([100000, 99000]), true);
+const idZ = (svg) => (svg.match(/<linearGradient id="(akg\d+)"/) || [])[1];
+ok('každý graf má vlastní id přechodu', !!idZ(a) && !!idZ(b2) && idZ(a) !== idZ(b2));
+ok('a čára si tu barvu bere taky', /stop-color="currentColor"/.test(a));
+// Barva podle toho, kam cena došla — stejně jako šipka u ceny vedle grafu.
+ok('růst je zelený', /class="akcie-graf nahoru/.test(a));
+ok('pokles červený', /class="akcie-graf dolu/.test(b2));
+ok('a ustálená cena šedá', /class="akcie-graf rovne/.test(krivka(body([100000, 100000]), true)));
+// Linky na pozadí patří jen velkému grafu; na kartě by z nich byla mřížka.
+ok('velký graf má vodítka', /<g class="g-mrizka">/.test(g));
+ok('malý ne', !/g-mrizka/.test(m));
+const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'compounder',
+  'game', 'game.css'), 'utf8');
+// Barvu drží jediná vlastnost `color` na svg: čára i přechod si ji berou
+// přes currentColor, takže se mění jedním řádkem. Výchozí je pokles.
+ok('barvu drží CSS přes color', /\.akcie-graf\{[\s\S]{0,160}color:#/.test(css)
+  && /\.akcie-graf\.nahoru\{color:/.test(css)
+  && /\.akcie-graf\.rovne\{color:/.test(css));
+ok('čára bere barvu z currentColor', /\.akcie-graf \.g-cara\{[\s\S]{0,80}stroke:currentColor/.test(css));
 
 // ─── Šipka u ceny ────────────────────────────────────────────────────────────
 ok('růst proti začátku grafu je nahoru',

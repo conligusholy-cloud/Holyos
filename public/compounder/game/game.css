@@ -1285,3 +1285,18 @@ button.kv:active{background:rgba(124,92,255,.12)}
 .fond-graf .g-hodnota{fill:none;stroke:#6aa9ff;stroke-width:2;stroke-linejoin:round}
 /* Malý graf na kartě burzy: jde o tvar, ne o čtení čísel. */
 .fond-graf.graf-maly{height:44px;margin:2px 0}
+
+/* Cena akcie. Čára plus plocha pod ní, která se dolů vytrácí — samotná tenká
+   linka v tmavé kartě vypadala jako čárka tužkou. Barvu drží `color`, takže
+   si ji čára i přechod berou samy přes currentColor a mění se jedním řádkem
+   podle toho, kam cena došla. */
+.akcie-graf{display:block;width:100%;height:84px;margin:6px 0 2px;overflow:visible;
+  color:#f0603a}
+.akcie-graf.nahoru{color:#2fe3a0}
+.akcie-graf.rovne{color:#8aa0c0}
+.akcie-graf .g-cara{fill:none;stroke:currentColor;stroke-width:2.2;
+  stroke-linejoin:round;stroke-linecap:round}
+/* Linky na pozadí jsou vodítko, ne obsah — proto sotva znatelné. */
+.akcie-graf .g-mrizka line{stroke:var(--border);stroke-width:1;opacity:.5;
+  vector-effect:non-scaling-stroke}
+.akcie-graf.graf-maly{height:46px;margin:2px 0}

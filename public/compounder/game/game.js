@@ -12354,13 +12354,17 @@ function loadAkcieTrh(id, then) {
 //
 // Křivka se kreslí zvlášť, protože ji chce i malá karta na burze. Tam se
 // pod ni nic nepíše — na seznamu jde o tvar, ne o čísla.
+// Pořadové číslo grafu. Přechod se v SVG odkazuje přes id, a na jedné
+// obrazovce jich visí vedle sebe klidně pět — se stejným id by si všechny
+// vzaly barvu toho prvního.
+var AKCIE_GRAF_ID = 0;
 function akcieKrivka(body, maly) {
   if (!body || body.length < 2) return '';
   // Čas vodorovně, obchody v jedné minutě do jednoho okna — jinak deset
   // obchodů z jedné chvíle udělá z poloviny grafu pilu. Na malé kartě jde
   // o tvar, tam stačí hrubší okna.
   body = vzorkyPoCase(body, maly ? 30 : 60);
-  var S = 300, V = maly ? 44 : 80;
+  var S = 300, V = maly ? 46 : 84;
   var max = 0, min = Infinity;
   body.forEach(function (b) {
     if (b.cena > max) max = b.cena;
@@ -12374,12 +12378,35 @@ function akcieKrivka(body, maly) {
   var kam = podilCasu(body);
   var x = function (b, i) { return kam(b, i) * S; };
   var y = function (v) { return V - ((Math.max(dno, v) - dno) / rozsah) * V; };
-  var cara = body.map(function (b, i) {
-    return x(b, i).toFixed(1) + ',' + y(b.cena).toFixed(1);
-  }).join(' ');
-  return '<svg class="fond-graf' + (maly ? ' graf-maly' : '') + '" viewBox="0 0 ' + S + ' ' + V + '"'
+  var xy = body.map(function (b, i) { return [x(b, i), y(b.cena)]; });
+  var cara = xy.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
+  // Plocha pod čarou. Zavře se dolů na obou koncích, takže přechod vybarví
+  // přesně to, co je pod cenou — ne celý rám.
+  var plocha = xy[0][0].toFixed(1) + ',' + V + ' ' + cara + ' '
+    + xy[xy.length - 1][0].toFixed(1) + ',' + V;
+  // Barva podle toho, kam cena za celý graf došla. Zelená nahoru, červená
+  // dolů, šedá když se nehnula — stejně jako šipka u ceny, ať si graf
+  // a číslo vedle něj neprotiřečí.
+  var prvni = body[0].cena, posl = body[body.length - 1].cena;
+  var smer = posl > prvni ? 'nahoru' : (posl < prvni ? 'dolu' : 'rovne');
+  var id = 'akg' + (++AKCIE_GRAF_ID);
+  // Vodorovné linky jen u velkého grafu. Na kartě by z nich byla mřížka přes
+  // půl obrázku a o čtení čísel tam nejde.
+  var mrizka = maly ? '' : '<g class="g-mrizka">'
+    + [0.25, 0.5, 0.75].map(function (d) {
+        return '<line x1="0" x2="' + S + '" y1="' + (V * d).toFixed(1)
+          + '" y2="' + (V * d).toFixed(1) + '"/>';
+      }).join('') + '</g>';
+  return '<svg class="akcie-graf ' + smer + (maly ? ' graf-maly' : '') + '"'
+    + ' viewBox="0 0 ' + S + ' ' + V + '"'
     + ' preserveAspectRatio="none" role="img" aria-label="' + esc(tx('akcie.graf')) + '">'
-    + '<polyline points="' + cara + '" class="g-hodnota" vector-effect="non-scaling-stroke"/>'
+    + '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0%" stop-color="currentColor" stop-opacity="0.30"/>'
+    + '<stop offset="100%" stop-color="currentColor" stop-opacity="0"/>'
+    + '</linearGradient></defs>'
+    + mrizka
+    + '<polygon points="' + plocha + '" fill="url(#' + id + ')"/>'
+    + '<polyline points="' + cara + '" class="g-cara" vector-effect="non-scaling-stroke"/>'
     + '</svg>';
 }
 function akcieGraf(body) {
