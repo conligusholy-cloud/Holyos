@@ -3272,6 +3272,16 @@ async function akcieVynosy(ids) {
 // Kolik obchodů se vejde do malého grafu v seznamu. Dost na to, aby byl
 // vidět pohyb, a málo na to, aby seznam nenesl stovky čísel pro nic.
 const AKCIE_GRAF_SEZNAM = 30;
+// Kolik obchodů se kreslí do grafu. Padesát je tak akorát: hráč vidí, jak se
+// s akcií obchoduje, a ne jen poslední dva pohyby.
+const AKCIE_GRAF_OBCHODU = 50;
+// Graf fondu: nejdřív obchody, a teprve když se ještě neobchodovalo, řada
+// cen. Prázdný graf vypadá jako rozbitá hra, rovná čára je poctivá odpověď.
+async function grafFondu(alianceId) {
+  const obchody = await CENA.radaObchodu(alianceId, AKCIE_GRAF_OBCHODU);
+  if (obchody.length >= 2) return obchody;
+  return CENA.radaCen(alianceId, AKCIE_GRAF_SEZNAM);
+}
 
 // GET /trade/akcie → fondy, jejichž akcie se dají koupit
 //
@@ -3301,7 +3311,7 @@ router.get('/trade/akcie', hrac, api(async (req, res) => {
     // by u fondu, kde se děje nejvíc, sebral řádky všem ostatním.
     const [hodnota, graf] = await Promise.all([
       hodnotaFondu(f.id),
-      CENA.radaCen(f.id, AKCIE_GRAF_SEZNAM),
+      grafFondu(f.id),
     ]);
     const s = akcieStav(f, hodnota);
     const vyn = vynosy.get(f.id) || { nese: 0, posledni: 0, celkem: 0 };
@@ -3333,12 +3343,12 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
   await DIV.dorovnej(req.player.id).catch(() => 0);
   const al = await prisma.gameAliance.findUnique({ where: { id: alianceId } });
   if (!al) return res.status(404).json({ error: stx(req)('server.takovy_fond_tu_neni') });
-  const [obchody, ceny, moje, hodnota, fondVolno, mujRadek] = await Promise.all([
-    // Obchody jsou na výpis posledních obchodů. Graf se kreslí z řady cen —
-    // ta nese i přecenění, když se pohnula hodnota fondu.
+  const [obchody, graf, moje, hodnota, fondVolno, mujRadek] = await Promise.all([
+    // Obchody jsou na výpis posledních obchodů. Graf se kreslí zvlášť: jsou
+    // v něm obchody, ne přecenění, a je jich tolik, kolik jich bylo.
     prisma.gameAkcieObchod.findMany({ where: { aliance_id: alianceId },
       orderBy: { kdy: 'desc' }, take: 200 }),
-    CENA.radaCen(alianceId, 200),
+    grafFondu(alianceId),
     akciiDrzi(alianceId, req.player.id),
     hodnotaFondu(alianceId),
     fondVolne(alianceId, al),
@@ -3362,7 +3372,7 @@ router.get('/trade/akcie/:id', hrac, api(async (req, res) => {
     // vědět dřív, než si akcii koupí kvůli ní.
     dividenda_ma_z_ceho: fondVolno.volne > 0,
     posledni_cena: obchody.length ? obchody[0].cena : null,
-    graf: ceny.map((c) => ({ kdy: c.kdy, cena: c.cena, duvod: c.duvod })),
+    graf: graf.map((c) => ({ kdy: c.kdy, cena: c.cena, duvod: c.duvod })),
     // Poslední obchody zvlášť: graf je o ceně, tohle o tom, kdo kolik koupil.
     // Ke každému se pošle i to, o kolik cenou hnul — obchody chodí od
     // nejnovějšího, takže předchozí cena je ta o řádek níž. Bez toho se ze

@@ -150,9 +150,10 @@ function zuby(body, klic) {
   // přeceňování běží každou hodinu. Na časové ose pak klidný týden sežral
   // celou šířku a jediný skutečný pohyb byl svislý schod na kraji.
   //
-  // Cena proto kreslí posledních 30 OBCHODŮ (na kartě 20) rovnoměrně vedle
-  // sebe. Je to vědomá výjimka, ne nedopatření — kdyby se vrátila zpátky na
-  // čas, vrátí se i ten schod.
+  // Cena proto kreslí posledních padesát OBCHODŮ rovnoměrně vedle sebe —
+  // stejně na velkém grafu i na malé kartě, aby si neodporovaly. Je to
+  // vědomá výjimka, ne nedopatření: kdyby se vrátila zpátky na čas, vrátí
+  // se i ten schod.
   //
   // A jsou to obchody, ne jen změny ceny: přecenění běží každou hodinu, takže
   // v řadě cen jich je drtivá většina a graf z nich byl rovná čára s jedním
@@ -160,13 +161,14 @@ function zuby(body, klic) {
   console.log('\nGraf ceny akcie kreslí obchody');
   ma(/function akcieZmeny\(body, kolik\)/.test(HRA), 'změny se vybírají zvlášť');
   ma(/function akcieObchodyGrafu\(body, kolik\)/.test(HRA), 'a obchody taky');
-  ma(/function akcieKrivka[\s\S]{0,900}akcieObchodyGrafu\(body, maly \? 20 : 30\)/.test(HRA),
-    'graf bere posledních 30 obchodů, na kartě 20');
+  ma(/var AKCIE_GRAF_OBCHODU = 50;/.test(HRA), 'kreslí se padesát obchodů');
+  ma(/function akcieKrivka[\s\S]{0,1100}akcieObchodyGrafu\(body, AKCIE_GRAF_OBCHODU\)/.test(HRA),
+    'a stejně na velkém grafu i na malé kartě');
   ma(/function akcieObchodyGrafu[\s\S]{0,400}b\.duvod === 'obchod'/.test(HRA),
     'přecenění se do grafu nepočítá');
   ma(/function akcieObchodyGrafu[\s\S]{0,400}l\.length >= 2 \? l\.slice\(-n\) : akcieZmeny\(body, n\)/.test(HRA),
     'dokud se neobchodovalo, kreslí se změny ceny');
-  ma(/function akcieKrivka[\s\S]{0,900}var krok = S \/ Math\.max\(1, body\.length - 1\);/.test(HRA),
+  ma(/function akcieKrivka[\s\S]{0,1300}var krok = S \/ Math\.max\(1, body\.length - 1\);/.test(HRA),
     'rozložené rovnoměrně po šířce');
   ma(!/function akcieKrivka[\s\S]{0,900}podilCasu\(body\)/.test(HRA),
     'a na čas se u ceny neptá');

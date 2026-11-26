@@ -29,6 +29,22 @@ async function zapisCenu(klient, alianceId, cena, duvod, ucetni) {
     ucetni: Math.max(0, Number(ucetni) || 0) } });
 }
 
+// Graf OBCHODŮ. Posledních `kolik` cen, u kterých stál skutečný obchod,
+// od nejstaršího po nejnovější.
+//
+// Řada cen nese i přecenění — hodiny, kdy se neobchodovalo a cena se jen
+// přepočítala podle hodnoty fondu. V posledních třiceti bodech řady proto
+// bývaly dva tři obchody a graf z nich byl rovná čára s jedním skokem na
+// kraji. Obchody se tedy vybírají rovnou v databázi: padesát obchodů je
+// padesát obchodů, i kdyby se mezi nimi přecenilo stokrát.
+async function radaObchodu(alianceId, kolik) {
+  const rows = await prisma.gameAkcieCena.findMany({
+    where: { aliance_id: alianceId, duvod: 'obchod' }, orderBy: { kdy: 'desc' },
+    take: Math.max(1, kolik || 50),
+    select: { kdy: true, cena: true, duvod: true } }).catch(() => []);
+  return rows.slice().reverse();
+}
+
 // Graf ceny. Posledních `kolik` bodů od nejstaršího po nejnovější.
 async function radaCen(alianceId, kolik) {
   const rows = await prisma.gameAkcieCena.findMany({
@@ -82,4 +98,4 @@ async function precenFondu(alianceId, hodnota) {
   return 1;
 }
 
-module.exports = { zapisCenu, radaCen, precenFondu };
+module.exports = { zapisCenu, radaCen, radaObchodu, precenFondu };

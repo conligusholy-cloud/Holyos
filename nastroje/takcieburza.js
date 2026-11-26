@@ -45,7 +45,7 @@ if (chyb) { console.log('\n' + chyb + ' nesedí'); process.exit(1); }
 // Okolí, které kreslení potřebuje. Formátování peněz tu nehraje roli,
 // takže stačí, aby číslo prošlo tak, jak je.
 const box = { esc: (x) => String(x), tx: (k) => k, kcFull: (n) => String(Math.round(n)),
-  AKCIE_GRAF_ID: 0 };
+  AKCIE_GRAF_ID: 0, AKCIE_GRAF_OBCHODU: 50 };
 vm.createContext(box);
 vm.runInContext(kusy.join('\n'), box);
 const krivka = box.akcieKrivka, sipka = box.akcieSipka;
@@ -95,6 +95,7 @@ const ust = krivka(body([100000, 100000, 100000]), false);
 ok('a ta čára se opravdu nakreslí', ust.indexOf('<polyline') > 0);
 
 // ─── Graf je graf OBCHODŮ ────────────────────────────────────────────────────
+
 // Řada cen nese i přecenění — zápisy z hodin, kdy se neobchodovalo a cena se
 // jen přepočítala podle hodnoty fondu. Těch je drtivá většina: z grafu byla
 // dlouhá rovná čára a jediný skutečný obchod vypadal jako osamocený skok na
@@ -136,7 +137,7 @@ ok('značka drží tloušťku i v roztažené kartě',
 // obchodů — hráč četl rozpětí, které na grafu vůbec nebylo.
 const usekG = (hra.match(/function akcieGraf\(body\) \{[\s\S]*?\n\}/) || [''])[0];
 ok('popisek počítá s nakresleným úsekem',
-  /var videt = akcieObchodyGrafu\(body, 30\);/.test(usekG));
+  /var videt = akcieObchodyGrafu\(body, AKCIE_GRAF_OBCHODU\);/.test(usekG));
 ok('a říká, kolik obchodů na grafu je',
   /akcie\.obchod_1/.test(usekG) && /akcie\.graf_bez_obchodu/.test(usekG));
 ok('nejvyšší cena se bere taky z něj',
@@ -351,9 +352,12 @@ const routy = fs.readFileSync(path.join(__dirname, '..', 'routes',
 const r = routy.slice(routy.indexOf("router.get('/trade/akcie'"));
 const usekR = r.slice(0, r.indexOf("router.get('/trade/akcie/:id'"));
 ok('seznam nese graf', /graf,/.test(usekR));
-// Graf už není řada obchodů, ale řada CEN: cena se hybe i tehdy, když se
-// s akciemi neobchoduje a jen se pohnula hodnota fondu.
-ok('graf se čte z řady cen', /CENA\.radaCen\(f\.id, AKCIE_GRAF_SEZNAM\)/.test(usekR));
+// Graf je řada OBCHODŮ. Cena se sice hýbe i přeceněním, když se pohnula
+// hodnota fondu, ale těch zápisů je drtivá většina — v posledních třiceti
+// bodech řady cen byly dva tři obchody a karta z nich byla rovná čára
+// s jedním skokem. Řada cen zbyla jako záloha pro fond, kde se ještě
+// neobchodovalo.
+ok('karta ve výpisu kreslí obchody', /grafFondu\(f\.id\)/.test(usekR));
 ok('a nese cenu, proti které se šipka měří',
   /cena_drive: graf\.length \? graf\[0\]\.cena : null/.test(usekR));
 ok('bez obchodu je null, ne nula', !/cena_drive: graf\.length \? graf\[0\]\.cena : 0/.test(usekR));
@@ -454,6 +458,20 @@ ok('fond nese kapitál z akcií', /akcie_kapital: akcieKap\.kapital/.test(usekFR
 ok('a graf ceny', /akcie_graf: akcieObchody\.slice\(-30\)/.test(usekFR));
 ok('kapitál počítá služba, ne routa',
   /require\('\.\.\/services\/game\/akcie'\)\.kapital\(akcieObchody\)/.test(usekFR));
+
+// Padesát obchodů posílá server (ne posledních padesát ZÁZNAMŮ ceny — mezi
+// nimi je přecenění a obchodů by v nich byly tři).
+ok('server posílá do grafu obchody, ne řadu cen',
+  /async function radaObchodu\(alianceId, kolik\)/.test(
+    fs.readFileSync(path.join(__dirname, '..', 'services', 'game', 'akcie-cena.js'), 'utf8'))
+  && /duvod: 'obchod' \}, orderBy: \{ kdy: 'desc' \}/.test(
+    fs.readFileSync(path.join(__dirname, '..', 'services', 'game', 'akcie-cena.js'), 'utf8')));
+ok('a je jich padesát', /const AKCIE_GRAF_OBCHODU = 50;/.test(routy)
+  && /var AKCIE_GRAF_OBCHODU = 50;/.test(hra));
+ok('bez obchodů pošle řadu cen, ať karta není prázdná',
+  /if \(obchody\.length >= 2\) return obchody;\n  return CENA\.radaCen\(alianceId, AKCIE_GRAF_SEZNAM\);/.test(routy));
+ok('graf dostane výpis i karta ve výpisu fondů',
+  (routy.match(/grafFondu\(/g) || []).length === 3);
 
 console.log(chyb ? '\n' + chyb + ' nesedí' : '\nSedí.');
 process.exit(chyb ? 1 : 0);

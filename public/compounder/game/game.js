@@ -12574,8 +12574,9 @@ function akcieZmeny(body, kolik) {
 //
 // Dokud obchody nejsou aspoň dva, kreslí se řada cen (a z ní změny): rovná
 // čára je poctivá odpověď, prázdno vypadá jako rozbitá hra.
+var AKCIE_GRAF_OBCHODU = 50;   // kolik obchodů se kreslí; server posílá tolik
 function akcieObchodyGrafu(body, kolik) {
-  var n = Math.max(2, kolik || 30);
+  var n = Math.max(2, kolik || AKCIE_GRAF_OBCHODU);
   var l = (body || []).filter(function (b) { return b.duvod === 'obchod'; });
   return l.length >= 2 ? l.slice(-n) : akcieZmeny(body, n);
 }
@@ -12588,7 +12589,11 @@ function akcieKrivka(body, maly) {
   // Vodorovně se kreslí OBCHODY, rovnoměrně vedle sebe — ne čas. Při čase
   // sežral klidný týden celou šířku a jediný pohyb byl svislý schod na kraji;
   // takhle je vidět, jak se cena hýbala.
-  body = akcieObchodyGrafu(body, maly ? 20 : 30);
+  //
+  // Padesát i na malé kartě: ta má ukazovat tentýž vývoj jako velký graf, jen
+  // menší. S kratší pamětí by si odporovaly — na kartě rovná čára se skokem,
+  // ve výpisu zubatá křivka téhož fondu.
+  body = akcieObchodyGrafu(body, AKCIE_GRAF_OBCHODU);
   if (body.length < 2) return '';
   var S = 300, V = maly ? 46 : 84;
   var max = 0, min = Infinity;
@@ -12654,7 +12659,7 @@ function akcieGraf(body) {
   // Popisek musí mluvit o tom, co je NAKRESLENÉ, ne o celé řadě ze serveru.
   // Dřív pod grafem stálo datum prvního záznamu, i když se kreslilo posledních
   // třicet obchodů — hráč pak četl rozpětí, které na grafu vůbec nebylo.
-  var videt = akcieObchodyGrafu(body, 30);
+  var videt = akcieObchodyGrafu(body, AKCIE_GRAF_OBCHODU);
   var max = 0;
   videt.forEach(function (b) { if (b.cena > max) max = b.cena; });
   var kolik = akcieMaObchody(body)
