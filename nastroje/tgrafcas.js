@@ -150,13 +150,22 @@ function zuby(body, klic) {
   // přeceňování běží každou hodinu. Na časové ose pak klidný týden sežral
   // celou šířku a jediný skutečný pohyb byl svislý schod na kraji.
   //
-  // Cena proto kreslí posledních 30 ZMĚN (na kartě 20) rovnoměrně vedle sebe.
-  // Je to vědomá výjimka, ne nedopatření — kdyby se vrátila zpátky na čas,
-  // vrátí se i ten schod.
-  console.log('\nGraf ceny akcie kreslí změny');
+  // Cena proto kreslí posledních 30 OBCHODŮ (na kartě 20) rovnoměrně vedle
+  // sebe. Je to vědomá výjimka, ne nedopatření — kdyby se vrátila zpátky na
+  // čas, vrátí se i ten schod.
+  //
+  // A jsou to obchody, ne jen změny ceny: přecenění běží každou hodinu, takže
+  // v řadě cen jich je drtivá většina a graf z nich byl rovná čára s jedním
+  // skokem na kraji. Jeden bod = jeden obchod.
+  console.log('\nGraf ceny akcie kreslí obchody');
   ma(/function akcieZmeny\(body, kolik\)/.test(HRA), 'změny se vybírají zvlášť');
-  ma(/function akcieKrivka[\s\S]{0,600}akcieZmeny\(body, maly \? 20 : 30\)/.test(HRA),
-    'a graf z nich bere posledních 30, na kartě 20');
+  ma(/function akcieObchodyGrafu\(body, kolik\)/.test(HRA), 'a obchody taky');
+  ma(/function akcieKrivka[\s\S]{0,900}akcieObchodyGrafu\(body, maly \? 20 : 30\)/.test(HRA),
+    'graf bere posledních 30 obchodů, na kartě 20');
+  ma(/function akcieObchodyGrafu[\s\S]{0,400}b\.duvod === 'obchod'/.test(HRA),
+    'přecenění se do grafu nepočítá');
+  ma(/function akcieObchodyGrafu[\s\S]{0,400}l\.length >= 2 \? l\.slice\(-n\) : akcieZmeny\(body, n\)/.test(HRA),
+    'dokud se neobchodovalo, kreslí se změny ceny');
   ma(/function akcieKrivka[\s\S]{0,900}var krok = S \/ Math\.max\(1, body\.length - 1\);/.test(HRA),
     'rozložené rovnoměrně po šířce');
   ma(!/function akcieKrivka[\s\S]{0,900}podilCasu\(body\)/.test(HRA),

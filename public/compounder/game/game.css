@@ -1323,4 +1323,8 @@ button.kv:active{background:rgba(124,92,255,.12)}
 /* Linky na pozadí jsou vodítko, ne obsah — proto sotva znatelné. */
 .akcie-graf .g-mrizka line{stroke:var(--border);stroke-width:1;opacity:.5;
   vector-effect:non-scaling-stroke}
+/* Čárka u každého obchodu. Je ve stejné barvě jako čára, jen tenčí — má
+   říct „tady byl obchod", ne přetáhnout pozornost na sebe. */
+.akcie-graf .g-znacky line{stroke:currentColor;stroke-width:1.6;opacity:.75;
+  stroke-linecap:round}
 .akcie-graf.graf-maly{height:46px;margin:2px 0}

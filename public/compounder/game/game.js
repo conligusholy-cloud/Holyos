@@ -12546,12 +12546,33 @@ function akcieZmeny(body, kolik) {
   });
   return (zmeny.length >= 2 ? zmeny : (body || [])).slice(-n);
 }
+// Graf ceny je graf OBCHODŮ. Řada cen ze serveru nese i přecenění — zápisy
+// z hodin, kdy se neobchodovalo a cena se jen přepočítala podle hodnoty
+// fondu. Těch je drtivá většina, takže z grafu byla dlouhá rovná čára
+// a jediný skutečný obchod vypadal jako osamocený skok na kraji.
+//
+// Jeden bod = jeden obchod. Zlomů je tedy přesně tolik, kolik se doopravdy
+// zobchodovalo, a graf odpovídá na otázku „jak se s tím obchoduje".
+// Stejná cena dvakrát po sobě jsou dva obchody a dva body — slít je by
+// znamenalo tvrdit, že se neobchodovalo.
+//
+// Dokud obchody nejsou aspoň dva, kreslí se řada cen (a z ní změny): rovná
+// čára je poctivá odpověď, prázdno vypadá jako rozbitá hra.
+function akcieObchodyGrafu(body, kolik) {
+  var n = Math.max(2, kolik || 30);
+  var l = (body || []).filter(function (b) { return b.duvod === 'obchod'; });
+  return l.length >= 2 ? l.slice(-n) : akcieZmeny(body, n);
+}
+// Obchodovalo se vůbec? Podle toho se pod grafem píše, co je na něm vidět.
+function akcieMaObchody(body) {
+  return (body || []).filter(function (b) { return b.duvod === 'obchod'; }).length >= 2;
+}
 function akcieKrivka(body, maly) {
   if (!body || body.length < 2) return '';
-  // Vodorovně se kreslí ZMĚNY, rovnoměrně vedle sebe — ne čas. Při čase
+  // Vodorovně se kreslí OBCHODY, rovnoměrně vedle sebe — ne čas. Při čase
   // sežral klidný týden celou šířku a jediný pohyb byl svislý schod na kraji;
   // takhle je vidět, jak se cena hýbala.
-  body = akcieZmeny(body, maly ? 20 : 30);
+  body = akcieObchodyGrafu(body, maly ? 20 : 30);
   if (body.length < 2) return '';
   var S = 300, V = maly ? 46 : 84;
   var max = 0, min = Infinity;
@@ -12585,6 +12606,19 @@ function akcieKrivka(body, maly) {
         return '<line x1="0" x2="' + S + '" y1="' + (V * d).toFixed(1)
           + '" y2="' + (V * d).toFixed(1) + '"/>';
       }).join('') + '</g>';
+  // Značka u každého obchodu. Bez ní se ze tří obchodů dá vyčíst leccos —
+  // třeba že cena „celou dobu stála a pak skočila". Takhle je vidět, kolikrát
+  // se doopravdy obchodovalo.
+  //
+  // Svislá čárka, ne kolečko: graf se roztahuje do šířky karty
+  // (preserveAspectRatio="none") a kolečko by se roztáhlo na vajíčko. Svislá
+  // čára si díky non-scaling-stroke udrží tloušťku.
+  var znacky = maly ? '' : '<g class="g-znacky">'
+    + xy.map(function (p) {
+        return '<line x1="' + p[0].toFixed(1) + '" x2="' + p[0].toFixed(1)
+          + '" y1="' + (p[1] - 3).toFixed(1) + '" y2="' + (p[1] + 3).toFixed(1)
+          + '" vector-effect="non-scaling-stroke"/>';
+      }).join('') + '</g>';
   return '<svg class="akcie-graf ' + smer + (maly ? ' graf-maly' : '') + '"'
     + ' viewBox="0 0 ' + S + ' ' + V + '"'
     + ' preserveAspectRatio="none" role="img" aria-label="' + esc(tx('akcie.graf')) + '">'
@@ -12595,16 +12629,24 @@ function akcieKrivka(body, maly) {
     + mrizka
     + '<polygon points="' + plocha + '" fill="url(#' + id + ')"/>'
     + '<polyline points="' + cara + '" class="g-cara" vector-effect="non-scaling-stroke"/>'
+    + znacky
     + '</svg>';
 }
 function akcieGraf(body) {
   var k = akcieKrivka(body, false);
   if (!k) return '<p class="fine">' + esc(tx('akcie.graf_zatim')) + '</p>';
+  // Popisek musí mluvit o tom, co je NAKRESLENÉ, ne o celé řadě ze serveru.
+  // Dřív pod grafem stálo datum prvního záznamu, i když se kreslilo posledních
+  // třicet obchodů — hráč pak četl rozpětí, které na grafu vůbec nebylo.
+  var videt = akcieObchodyGrafu(body, 30);
   var max = 0;
-  body.forEach(function (b) { if (b.cena > max) max = b.cena; });
+  videt.forEach(function (b) { if (b.cena > max) max = b.cena; });
+  var kolik = akcieMaObchody(body)
+    ? cislo1(videt.length) + ' ' + esc(mn(videt.length, tx('akcie.obchod_1'),
+        tx('akcie.obchod_2'), tx('akcie.obchod_5')))
+    : esc(tx('akcie.graf_bez_obchodu'));
   return k
-    + '<div class="row"><span class="muted small">'
-    + esc(tx('veta.fond_graf_od', { p1: datumKratce(body[0].kdy) })) + '</span>'
+    + '<div class="row"><span class="muted small">' + kolik + '</span>'
     + '<span class="muted small">' + esc(tx('veta.fond_graf_max', { p1: max })) + '</span></div>';
 }
 

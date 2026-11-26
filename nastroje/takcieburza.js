@@ -34,6 +34,8 @@ const kusy = [
   vytahni(/function vzorkyPoCase\(body, oken\) \{[\s\S]*?\n\}/, 'vzorkyPoCase'),
   vytahni(/function podilCasu\(body\) \{[\s\S]*?\n\}/, 'podilCasu'),
   vytahni(/function akcieZmeny\(body, kolik\) \{[\s\S]*?\n\}/, 'akcieZmeny'),
+  vytahni(/function akcieObchodyGrafu\(body, kolik\) \{[\s\S]*?\n\}/, 'akcieObchodyGrafu'),
+  vytahni(/function akcieMaObchody\(body\) \{[\s\S]*?\n\}/, 'akcieMaObchody'),
   vytahni(/function akcieKrivka\(body, maly\) \{[\s\S]*?\n\}/, 'akcieKrivka'),
   vytahni(/function akcieSipka\(f\) \{[\s\S]*?\n\}/, 'akcieSipka'),
   vytahni(/function smerVynosu\(ted, pred\) \{[\s\S]*?\n\}/, 'smerVynosu'),
@@ -91,6 +93,58 @@ ok('ustálená cena dá rovnou čáru, ne prázdno',
   zmeny(body([100, 100, 100]), 30).length >= 2);
 const ust = krivka(body([100000, 100000, 100000]), false);
 ok('a ta čára se opravdu nakreslí', ust.indexOf('<polyline') > 0);
+
+// ─── Graf je graf OBCHODŮ ────────────────────────────────────────────────────
+// Řada cen nese i přecenění — zápisy z hodin, kdy se neobchodovalo a cena se
+// jen přepočítala podle hodnoty fondu. Těch je drtivá většina: z grafu byla
+// dlouhá rovná čára a jediný skutečný obchod vypadal jako osamocený skok na
+// kraji. Hráč pak nevěří ani jednomu číslu, co na grafu je.
+const vyber = box.akcieObchodyGrafu;
+const rada = (l) => l.map(function (x, i) {
+  return { kdy: '2026-11-0' + (i + 1), cena: x[0], duvod: x[1] };
+});
+const smes = rada([[100, 'upis'], [100, 'precena'], [100, 'precena'],
+  [140, 'obchod'], [140, 'precena'], [160, 'obchod'], [150, 'obchod']]);
+ok('do grafu jdou jen obchody',
+  vyber(smes, 30).map(function (b) { return b.cena; }).join(',') === '140,160,150');
+ok('a je jich tolik, kolik se obchodovalo', vyber(smes, 30).length === 3);
+// Dva obchody za stejnou cenu jsou DVA obchody. Slít je by znamenalo tvrdit,
+// že se mezitím neobchodovalo.
+const stejne = rada([[100, 'obchod'], [100, 'obchod'], [120, 'obchod']]);
+ok('stejná cena dvakrát po sobě jsou dva body',
+  vyber(stejne, 30).map(function (b) { return b.cena; }).join(',') === '100,100,120');
+ok('bere se posledních N obchodů',
+  vyber(rada([[1, 'obchod'], [2, 'obchod'], [3, 'obchod'], [4, 'obchod']]), 2)
+    .map(function (b) { return b.cena; }).join(',') === '3,4');
+// Dokud se neobchodovalo, je graf o ceně — prázdno vypadá jako rozbitá hra.
+const bezObchodu = rada([[100, 'upis'], [110, 'precena'], [120, 'precena']]);
+ok('bez obchodů se kreslí změny ceny',
+  vyber(bezObchodu, 30).map(function (b) { return b.cena; }).join(',') === '100,110,120');
+ok('a je to poznat', box.akcieMaObchody(bezObchodu) === false
+  && box.akcieMaObchody(smes) === true);
+// Každý obchod je na grafu vidět jako zlom — bez značek se ze tří obchodů
+// dá vyčíst leccos, třeba že cena „celou dobu stála a pak skočila".
+const sZnackami = krivka(smes, false);
+ok('u každého obchodu je značka',
+  (sZnackami.match(/<g class="g-znacky">[\s\S]*?<\/g>/) || [''])[0].split('<line').length - 1 === 3);
+ok('na malé kartě se značky nekreslí',
+  krivka(smes, true).indexOf('g-znacky') < 0);
+ok('značka drží tloušťku i v roztažené kartě',
+  /<g class="g-znacky">[\s\S]{0,200}vector-effect="non-scaling-stroke"/.test(sZnackami));
+// Popisek pod grafem musí mluvit o tom, co je NAKRESLENÉ. Dřív tam stálo
+// datum prvního záznamu z celé řady, i když se kreslilo posledních třicet
+// obchodů — hráč četl rozpětí, které na grafu vůbec nebylo.
+const usekG = (hra.match(/function akcieGraf\(body\) \{[\s\S]*?\n\}/) || [''])[0];
+ok('popisek počítá s nakresleným úsekem',
+  /var videt = akcieObchodyGrafu\(body, 30\);/.test(usekG));
+ok('a říká, kolik obchodů na grafu je',
+  /akcie\.obchod_1/.test(usekG) && /akcie\.graf_bez_obchodu/.test(usekG));
+ok('nejvyšší cena se bere taky z něj',
+  /videt\.forEach\(function \(b\) \{ if \(b\.cena > max\) max = b\.cena; \}\);/.test(usekG));
+ok('staré datum „od" pod grafem ceny zmizelo',
+  usekG.indexOf('veta.fond_graf_od') < 0);
+ok('značky mají svůj styl', /\.akcie-graf \.g-znacky line\{/.test(
+  fs.readFileSync(path.join(__dirname, '..', 'public', 'compounder', 'game', 'game.css'), 'utf8')));
 // Změny jsou vedle sebe rovnoměrně: o to jde, aby byl na grafu vidět tvar.
 const zub = souradnice(krivka(body([100, 110, 100, 110, 100]), false));
 ok('změny jsou rozložené rovnoměrně',
