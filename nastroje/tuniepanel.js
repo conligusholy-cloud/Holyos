@@ -137,6 +137,69 @@ ok('a každá si nese svůj počet',
 ok('klíč skupiny obsahuje území, ať se dvě nepletou',
   /'m:' \+ u\.okres_key \+ ':'/.test(hra));
 
+// ─── Panel se hlídá sám ──────────────────────────────────────────────────────
+// Hráč natáhne přípojky z panelu a zavře kartu. Když panel pod ní dál tvrdí
+// „chybí přípojky", vypadá to, že se akce nepovedla — a hráč ji udělá znovu.
+const zive = ['unieSkupinaMista', 'trhMoje', 'unieOtisk', 'unieSrovnejMista']
+  .map(function (n) {
+    const m = hra.match(new RegExp('function ' + n + '\\([\\s\\S]*?\\n\\}'));
+    ok('v game.js se našlo: ' + n, !!m);
+    return m ? m[0] : '';
+  });
+const ziv = { CLAIMS: {}, TRH: null, S: { revealed: {} }, UNIE: null, UNIE_OTEVRENO: {} };
+vm.createContext(ziv);
+vm.runInContext(zive.join('\n'), ziv);
+
+const misto = { spot_id: 's1', nazev: 'Billa', mesto: 'Bruntál',
+  pozemek: true, pripojky: 0, model: '', na_marketu: false };
+ok('holý zábor je rozdělaný', ziv.unieSkupinaMista(misto) === 'rozdelane');
+ok('s přípojkami se dá nabídnout',
+  ziv.unieSkupinaMista({ pripojky: 120000 }) === 'lze');
+ok('se strojem taky', ziv.unieSkupinaMista({ model: 'flex' }) === 'lze');
+ok('co visí na Market place, patří k visícím',
+  ziv.unieSkupinaMista({ model: 'flex', na_marketu: true }) === 'visi');
+// Tohle je ta vazba, kvůli které se skupiny nemůžou rozejít: seznam i hlídka
+// se ptají stejné funkce.
+const mista = (hra.match(/function unieMistaHtml\(u\) \{[\s\S]*?\n\}/) || [''])[0];
+ok('seznam skládá skupiny touž funkcí',
+  /unieSkupinaMista\(m\) === k/.test(mista));
+
+// Hráč natáhl přípojky: hra to ví ze záboru dřív, než se ozve server.
+ziv.UNIE = { uzemi: [{ okres_key: 'h3abc', mista: [misto] }] };
+ziv.CLAIMS = { s1: { mine: true, model: '', pripraveno: true, pozemek: true } };
+ziv.unieSrovnejMista();
+ok('místo po akci přeskočí do správné skupiny',
+  ziv.unieSkupinaMista(ziv.UNIE.uzemi[0].mista[0]) === 'lze');
+ok('a ta skupina se rovnou otevře, ať se řádek neztratí',
+  ziv.UNIE_OTEVRENO['m:h3abc:lze'] === true);
+
+// Dokud se trh nenačetl, nabídky se nesahají — prázdný seznam neznamená,
+// že na Market place nic nevisí.
+ziv.UNIE.uzemi[0].mista[0].na_marketu = true;
+ziv.unieSrovnejMista();
+ok('nenačtený trh nesmí shodit visící nabídku',
+  ziv.UNIE.uzemi[0].mista[0].na_marketu === true);
+ziv.TRH = [];
+ziv.unieSrovnejMista();
+ok('načtený trh ji srovná podle skutečnosti',
+  ziv.UNIE.uzemi[0].mista[0].na_marketu === false);
+
+// Otisk: hlídka podle něj pozná, že má smysl sáhnout na server.
+const o1 = ziv.unieOtisk();
+ok('otisk se beze změny nehýbe', ziv.unieOtisk() === o1);
+ziv.CLAIMS.s1.model = 'flex';
+ok('postavený stroj otisk změní', ziv.unieOtisk() !== o1);
+const o2 = ziv.unieOtisk();
+ziv.S.revealed.x = true;
+ok('a nově objevené místo taky', ziv.unieOtisk() !== o2);
+
+ok('hlídka sáhne na server jen při změně',
+  /function unieHlidej\(\) \{\n  if \(unieOtisk\(\) === UNIE_OTISK\) return;/.test(hra));
+ok('panel Unie je v řadě překreslování hry',
+  /else if \(!\$\('net-unie'\)\.classList\.contains\('hidden'\)\) unieHlidej\(\);/.test(hra));
+ok('a otisk se zapisuje při každém překreslení panelu',
+  /UNIE_OTISK = unieOtisk\(\);/.test(hra));
+
 // ─── Styl ────────────────────────────────────────────────────────────────────
 ok('skládačka má vlastní styl', /\.sklad>summary\{/.test(css));
 ok('a šipku, podle které je poznat, že jde rozkliknout',

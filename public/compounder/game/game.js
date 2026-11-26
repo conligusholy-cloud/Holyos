@@ -7956,6 +7956,9 @@ function paint() {
     // Agenda míst se musí překreslit taky — po výměně stroje nebo stavbě
     // v ní jinak svítí starý model, dokud hráč hru neobnoví.
     else if (!$('net-mista').classList.contains('hidden')) paintMista();
+    // Panel Unie v téhle řadě dlouho nebyl, a tak po akci zůstával viset na
+    // starých skupinách. Jde přes hlídku, ne natvrdo — je to dotaz na server.
+    else if (!$('net-unie').classList.contains('hidden')) unieHlidej();
     else paintNet();
   }
   if (!$('v-bank').classList.contains('hidden')) paintBank();
@@ -8083,6 +8086,7 @@ function paintUnie() {
   var box = $('unie-body'); if (!box) return;
   if (!(ME && ME.unie)) { box.innerHTML = '<p class="muted small">' + esc(tx('hra.unie_nedostupna')) + '</p>'; return; }
   if (!UNIE) box.innerHTML = '<p class="muted small">' + esc(tx('hra.nacitam')) + '</p>';
+  UNIE_OTISK = unieOtisk();
   api('/unie/prehled', { method: 'GET' }).then(function (r) {
     if (!r.ok) { box.innerHTML = '<p class="muted small">' + esc((r.j && r.j.error) || tx('hra.nepovedlo_se_34')) + '</p>'; return; }
     UNIE = r.j;
@@ -8091,6 +8095,66 @@ function paintUnie() {
     // Doručenky (servisní poplatky, výzvy) se mohly právě vytvořit.
     vyzvedniNasledky();
   }).catch(function () { box.innerHTML = '<p class="muted small">' + esc(tx('hra.server_neodpovida_35')) + '</p>'; });
+}
+// ─── Panel se hlídá sám ──────────────────────────────────────────────────────
+// Hráč natáhne přípojky z panelu Unie, zavře kartu — a panel pod ní pořád
+// tvrdí „chybí přípojky". Vypadá to, že se akce nepovedla, a hráč ji zkusí
+// znovu. Překreslovat panel natvrdo s každým tikem ale nejde: je to dotaz na
+// server a skládačka by se pod rukama překreslovala, i když se nic nestalo.
+//
+// Proto otisk: krátký zápis toho, z čeho se skupiny míst skládají. Bere se
+// z toho, co hra ví sama hned po akci (zábory a vlastní nabídky na Market
+// place), takže se změna pozná dřív, než se server vůbec ozve.
+function unieOtisk() {
+  var moje = Object.keys(CLAIMS).filter(function (id) {
+    return CLAIMS[id] && CLAIMS[id].mine;
+  }).sort().map(function (id) {
+    var c = CLAIMS[id];
+    return id + (c.model || '') + (c.pripraveno ? 'p' : '') + (c.pozemek ? 'z' : '');
+  });
+  var visi = TRH
+    ? TRH.filter(function (n) { return n.moje; }).map(function (n) { return n.spot_id; }).sort()
+    : [];
+  // Volná místa v území zná hra ze svých prozkoumaných měst — každé nové
+  // mění, co je v území ještě k mání.
+  return moje.join(',') + '|' + visi.join(',')
+    + '|' + Object.keys((S && S.revealed) || {}).length;
+}
+var UNIE_OTISK = null;
+// Co hra ví sama, přepíše rovnou — místo přeskočí do správné skupiny ve
+// chvíli, kdy hráč akci udělá, ne až se ozve server; ten pak totéž potvrdí.
+// Skupina, do které místo spadlo, se zároveň otevře: jinak by se řádek
+// ztratil ve sbalené skládačce a vypadalo by to, že zmizel.
+function unieSrovnejMista() {
+  if (!UNIE) return;
+  (UNIE.uzemi || []).forEach(function (u) {
+    (u.mista || []).forEach(function (m) {
+      var byla = unieSkupinaMista(m);
+      var c = CLAIMS[m.spot_id];
+      if (c && c.mine) {
+        m.model = c.model || '';
+        m.pozemek = !!c.pozemek;
+        // Klient zná jen „připraveno" — zábor s přípojkami a bez stroje. Na
+        // skupinu to stačí, přesnou částku dorovná server.
+        m.pripojky = c.pripraveno ? Math.max(1, m.pripojky || 0)
+          : (c.model ? m.pripojky : 0);
+      }
+      // Bez načteného trhu se nabídky nesahají — prázdný seznam neznamená,
+      // že na Market place nic nevisí.
+      if (TRH) m.na_marketu = !!trhMoje(m.spot_id);
+      var je = unieSkupinaMista(m);
+      if (je !== byla) UNIE_OTEVRENO['m:' + u.okres_key + ':' + je] = true;
+    });
+  });
+}
+// Běží s každým překreslením hry, ale na server sáhne, jen když se opravdu
+// něco změnilo.
+function unieHlidej() {
+  if (unieOtisk() === UNIE_OTISK) return;
+  var box = $('unie-body');
+  unieSrovnejMista();
+  if (box && UNIE) { box.innerHTML = unieHtml(UNIE); bindUnie(); }
+  paintUnie();
 }
 function unieRole(d) {
   var r = d.role || {};
@@ -8209,6 +8273,13 @@ function unieMistoStav(m) {
   if (m.pozemek) return tx('unie.misto_pozemek');
   return tx('unie.misto_holé');
 }
+// Do které skupiny místo patří. Jedna definice pro obě strany: podle ní se
+// seznam skládá a podle ní se také pozná, že místo po akci přeskočilo jinam.
+function unieSkupinaMista(m) {
+  if (m.na_marketu) return 'visi';
+  if (m.model || m.pripojky) return 'lze';
+  return 'rozdelane';
+}
 // Volná místa v území. Nechodí ze serveru — hra je zná ze svých prozkoumaných
 // měst, takže se na ně dá rovnou klepnout a otevřít je. Server pošle jen
 // seznam měst, která do území patří.
@@ -8236,9 +8307,12 @@ function unieMistaHtml(u) {
   if (!l.length && !volna.length) return '';
   // Tři skupiny, protože jsou to tři různé věci: co už visí na Market place,
   // co jde nabídnout hned, a co je v území volné a stačí to připravit.
-  var visi = l.filter(function (m) { return m.na_marketu; });
-  var lze = l.filter(function (m) { return !m.na_marketu && (m.model || m.pripojky); });
-  var rozdelane = l.filter(function (m) { return !m.na_marketu && !m.model && !m.pripojky; });
+  var vSkupine = function (k) {
+    return l.filter(function (m) { return unieSkupinaMista(m) === k; });
+  };
+  var visi = vSkupine('visi');
+  var lze = vSkupine('lze');
+  var rozdelane = vSkupine('rozdelane');
   // Každá skupina je zase skládačka: master má v území klidně třicet míst
   // a vypsaná pod sebou by z karty udělala seznam, ve kterém se nedá nic najít.
   var skupina = function (klic, nadpis, pocet, telo) {

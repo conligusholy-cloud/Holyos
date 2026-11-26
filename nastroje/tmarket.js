@@ -160,13 +160,22 @@ ok('karta území místa ukazuje', /unieMistaHtml\(u\)/.test(hra));
 // Holý zábor bez přípojek nabízet nejde — to je kus mapy, ne nabídka.
 // Seznam je proto rozdělený: co jde nabídnout, co visí, co je rozdělané
 // a co je v území ještě volné.
+// Pravidlo je na jednom místě: seznam i hlídka panelu se ptají téže funkce,
+// jinak by se skupiny časem rozešly a místo by po akci zůstalo viset tam,
+// kde bylo.
+const SKUPINA = { };
+vm.createContext(SKUPINA);
+vm.runInContext((hra.match(/function unieSkupinaMista\(m\) \{[\s\S]*?\n\}/) || [''])[0], SKUPINA);
 ok('nabídnout jde jen připravené místo nebo místo se strojem',
-  /var lze = l\.filter\(function \(m\) \{ return !m\.na_marketu && \(m\.model \|\| m\.pripojky\); \}\);/.test(hra));
+  SKUPINA.unieSkupinaMista({ pripojky: 120000 }) === 'lze'
+  && SKUPINA.unieSkupinaMista({ model: 'flex' }) === 'lze'
+  && SKUPINA.unieSkupinaMista({ model: 'flex', na_marketu: true }) !== 'lze');
 // Rozdělané místo nabízet nejde — chybí mu přípojky. Řádek ale nese akci,
 // kterou se to spraví: „chybí přípojky" samo o sobě je jen konstatování
 // a hráč pak panel zavře a jde je hledat na mapu.
 ok('rozdělané místo se nenabízí, ale je vidět',
-  /var rozdelane = l\.filter\(function \(m\) \{ return !m\.na_marketu && !m\.model && !m\.pripojky; \}\);/.test(hra));
+  SKUPINA.unieSkupinaMista({ pozemek: true, pripojky: 0, model: '' }) === 'rozdelane'
+  && /var rozdelane = vSkupine\('rozdelane'\);/.test(hra));
 ok('a nese rovnou akci, jak ho dodělat',
   /skupina\('rozdelane'[\s\S]{0,400}data-unie-misto="' \+ esc\(m\.spot_id\)[\s\S]{0,120}hra\.natahnout_pripojky/.test(hra));
 ok('místo visící na Market place se dá odsud otevřít',
