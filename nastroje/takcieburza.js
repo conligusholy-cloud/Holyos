@@ -33,6 +33,7 @@ const kusy = [
   // bez těchhle dvou by se ani nespustila.
   vytahni(/function vzorkyPoCase\(body, oken\) \{[\s\S]*?\n\}/, 'vzorkyPoCase'),
   vytahni(/function podilCasu\(body\) \{[\s\S]*?\n\}/, 'podilCasu'),
+  vytahni(/function akcieZmeny\(body, kolik\) \{[\s\S]*?\n\}/, 'akcieZmeny'),
   vytahni(/function akcieKrivka\(body, maly\) \{[\s\S]*?\n\}/, 'akcieKrivka'),
   vytahni(/function akcieSipka\(f\) \{[\s\S]*?\n\}/, 'akcieSipka'),
   vytahni(/function smerVynosu\(ted, pred\) \{[\s\S]*?\n\}/, 'smerVynosu'),
@@ -74,6 +75,33 @@ ok('nejdražší obchod je nejvýš nahoře', souradnice(g)[3][1] === 0);
 // u drahé akcie splynul v rovnou čáru a graf by byl k ničemu.
 const male = souradnice(krivka(body([100000, 101000]), false));
 ok('pohyb o procento je v grafu vidět', Math.abs(male[0][1] - male[1][1]) > 10);
+// ─── Vodorovně se kreslí ZMĚNY, ne čas ───────────────────────────────────────
+// Cena se zapisuje i když se nehnula (přeceňování), a klidný týden sežral
+// celou šířku grafu — jediný pohyb pak byl svislý schod na kraji. Hráče
+// zajímá, jak se cena hýbala, ne jak dlouho stála.
+const zmeny = box.akcieZmeny;
+ok('rovné úseky se do grafu neberou',
+  zmeny(body([100, 100, 100, 100, 110, 110, 120]), 30).map(function (b) { return b.cena; })
+    .join(',') === '100,110,120');
+ok('bere se posledních N změn',
+  zmeny(body([1, 2, 3, 4, 5, 6]), 3).map(function (b) { return b.cena; }).join(',') === '4,5,6');
+// Cena, která se ještě nehnula dvakrát, musí dát rovnou čáru — ne prázdno.
+// Prázdný graf vypadá jako rozbitá hra.
+ok('ustálená cena dá rovnou čáru, ne prázdno',
+  zmeny(body([100, 100, 100]), 30).length >= 2);
+const ust = krivka(body([100000, 100000, 100000]), false);
+ok('a ta čára se opravdu nakreslí', ust.indexOf('<polyline') > 0);
+// Změny jsou vedle sebe rovnoměrně: o to jde, aby byl na grafu vidět tvar.
+const zub = souradnice(krivka(body([100, 110, 100, 110, 100]), false));
+ok('změny jsou rozložené rovnoměrně',
+  zub.length === 5 && Math.abs(zub[1][0] - 75) < 0.5 && Math.abs(zub[2][0] - 150) < 0.5);
+ok('a první i poslední sedí na krajích',
+  zub[0][0] === 0 && Math.abs(zub[4][0] - 300) < 0.5);
+// Dlouhý klid před jedinou změnou nesmí graf sežrat.
+const poKlidu = souradnice(krivka(body([100, 100, 100, 100, 100, 100, 100, 120]), false));
+ok('po dlouhém klidu není graf jen schod na kraji',
+  poKlidu.length === 2 && poKlidu[0][0] === 0 && Math.abs(poKlidu[1][0] - 300) < 0.5);
+
 // Cena, která se nehnula, nesmí dělit nulou ani vystřelit mimo rám.
 const rovne = krivka(body([100000, 100000, 100000]), false);
 souradnice(rovne).forEach((b, i) => {

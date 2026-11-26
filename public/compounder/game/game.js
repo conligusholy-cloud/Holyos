@@ -12443,12 +12443,28 @@ function loadAkcieTrh(id, then) {
 // obrazovce jich visí vedle sebe klidně pět — se stejným id by si všechny
 // vzaly barvu toho prvního.
 var AKCIE_GRAF_ID = 0;
+// Posledních `kolik` ZMĚN ceny, ne posledních kolik záznamů. Cena se zapisuje
+// i když se nehnula (přeceňování), a času se zapíše za den spousta — graf pak
+// byl rovná čára s jedním schodem na konci. Hráče ale zajímá, jak se cena
+// hýbala, ne jak dlouho stála.
+//
+// Když se cena ještě nehnula dvakrát, vezmou se poslední záznamy tak, jak
+// jsou: rovná čára je poctivá odpověď, prázdno by vypadalo jako rozbitý graf.
+function akcieZmeny(body, kolik) {
+  var n = Math.max(2, kolik || 30);
+  var zmeny = [];
+  (body || []).forEach(function (b) {
+    if (!zmeny.length || zmeny[zmeny.length - 1].cena !== b.cena) zmeny.push(b);
+  });
+  return (zmeny.length >= 2 ? zmeny : (body || [])).slice(-n);
+}
 function akcieKrivka(body, maly) {
   if (!body || body.length < 2) return '';
-  // Čas vodorovně, obchody v jedné minutě do jednoho okna — jinak deset
-  // obchodů z jedné chvíle udělá z poloviny grafu pilu. Na malé kartě jde
-  // o tvar, tam stačí hrubší okna.
-  body = vzorkyPoCase(body, maly ? 30 : 60);
+  // Vodorovně se kreslí ZMĚNY, rovnoměrně vedle sebe — ne čas. Při čase
+  // sežral klidný týden celou šířku a jediný pohyb byl svislý schod na kraji;
+  // takhle je vidět, jak se cena hýbala.
+  body = akcieZmeny(body, maly ? 20 : 30);
+  if (body.length < 2) return '';
   var S = 300, V = maly ? 46 : 84;
   var max = 0, min = Infinity;
   body.forEach(function (b) {
@@ -12460,10 +12476,9 @@ function akcieKrivka(body, maly) {
   // ztratil v rovné čáře.
   var dno = min === max ? Math.max(0, min * 0.9) : min - (max - min) * 0.1;
   var rozsah = max - dno || 1;
-  var kam = podilCasu(body);
-  var x = function (b, i) { return kam(b, i) * S; };
+  var krok = S / Math.max(1, body.length - 1);
   var y = function (v) { return V - ((Math.max(dno, v) - dno) / rozsah) * V; };
-  var xy = body.map(function (b, i) { return [x(b, i), y(b.cena)]; });
+  var xy = body.map(function (b, i) { return [i * krok, y(b.cena)]; });
   var cara = xy.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
   // Plocha pod čarou. Zavře se dolů na obou koncích, takže přechod vybarví
   // přesně to, co je pod cenou — ne celý rám.

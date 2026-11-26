@@ -8,6 +8,11 @@
 //
 // Vzorky se proto slijí do stejně dlouhých oken (z každého zůstane ten
 // poslední, jako závěrečná cena na burze) a kreslí se podle času.
+//
+// Graf CENY AKCIE je vědomá výjimka: cena se zapisuje i když se nehnula
+// (přeceňování běží každou hodinu), takže na časové ose sežral klidný týden
+// celou šířku a jediný pohyb byl svislý schod na kraji. Ten kreslí posledních
+// 30 změn rovnoměrně vedle sebe.
 // =============================================================================
 'use strict';
 
@@ -130,18 +135,32 @@ function zuby(body, klic) {
 
 // ─── 6. Oba grafy to opravdu používají ──────────────────────────────────────
 {
-  console.log('\nOba grafy kreslí podle času');
+  console.log('\nGraf fondu kreslí podle času');
   ma(/function fondGraf[\s\S]{0,400}vzorkyPoCase\(body, 60\)/.test(HRA), 'fond slévá vzorky do oken');
   ma(/function fondGraf[\s\S]{0,700}podilCasu\(body\)/.test(HRA), 'a kreslí je podle času');
-  ma(/function akcieKrivka[\s\S]{0,400}vzorkyPoCase\(body, maly \? 30 : 60\)/.test(HRA),
-    'cena akcie taky — na malé kartě hrubší okna');
-  ma(/function akcieKrivka[\s\S]{0,900}podilCasu\(body\)/.test(HRA), 'a taky podle času');
   // Nikde nesmí zbýt stará osa podle pořadí.
   ma(!/var x = function \(i\) \{ return \(i \/ \(body\.length - 1\)\) \* S; \};/.test(HRA),
     'stará osa podle pořadí v kódu nezbyla');
   const osy = (HRA.match(/var x = function \(b, i\) \{ return kam\(b, i\) \* S; \};/g) || []).length;
-  ma(osy === 2, 'x bere bod, ne jen jeho pořadí — v obou grafech', osy + ' z 2');
-  ma(!/\(i \/ \(body\.length - 1\)\) \* S/.test(HRA), 'a nikde se nepočítá z pořadí v poli');
+  ma(osy === 1, 'x bere bod, ne jen jeho pořadí', osy + ' z 1');
+
+  // ── A graf ceny akcie schválně ne ──────────────────────────────────────────
+  // Hodnota fondu se vzorkuje, když se s penězi doopravdy hne — tam je čas
+  // informace. Cena akcie se ale do řady zapisuje i když se nehnula, protože
+  // přeceňování běží každou hodinu. Na časové ose pak klidný týden sežral
+  // celou šířku a jediný skutečný pohyb byl svislý schod na kraji.
+  //
+  // Cena proto kreslí posledních 30 ZMĚN (na kartě 20) rovnoměrně vedle sebe.
+  // Je to vědomá výjimka, ne nedopatření — kdyby se vrátila zpátky na čas,
+  // vrátí se i ten schod.
+  console.log('\nGraf ceny akcie kreslí změny');
+  ma(/function akcieZmeny\(body, kolik\)/.test(HRA), 'změny se vybírají zvlášť');
+  ma(/function akcieKrivka[\s\S]{0,600}akcieZmeny\(body, maly \? 20 : 30\)/.test(HRA),
+    'a graf z nich bere posledních 30, na kartě 20');
+  ma(/function akcieKrivka[\s\S]{0,900}var krok = S \/ Math\.max\(1, body\.length - 1\);/.test(HRA),
+    'rozložené rovnoměrně po šířce');
+  ma(!/function akcieKrivka[\s\S]{0,900}podilCasu\(body\)/.test(HRA),
+    'a na čas se u ceny neptá');
   // Popisek „od" musí ukazovat na skutečný první vzorek, ne na slitý.
   ma(/datumKratce\(vse\[0\]\.kdy\)/.test(HRA), 'popisek „od" bere první skutečný vzorek');
 }
