@@ -213,7 +213,8 @@ router.get('/unie/sousedi', requirePlayer, jenUnie, async (req, res, next) => {
       // Pobočka v okrese: území si smíš vzít tam, kam dosáhneš servisem.
       // Jinak by šlo skoupit půl republiky od stolu.
       const mesta = await prisma.gameArea.findMany({ where: { okres_key: o.key },
-        select: { name: true, lat: true, lon: true } }).catch(() => []);
+        select: { key: true, name: true, lat: true, lon: true },
+        orderBy: { population: 'desc' }, take: 8 }).catch(() => []);
       let pobocka = null;
       for (const m of mesta) {
         const p = pobockaVOkrese(st, m);
@@ -224,7 +225,11 @@ router.get('/unie/sousedi', requirePlayer, jenUnie, async (req, res, next) => {
         drzi: drzi.get(o.key) || null,
         licence: pot.licence, volnych: pot.volnych, mist: pot.mist, skore: pot.skore,
         zavazek: pot.zavazek, obyvatel: pot.obyvatel || null, mest: pot.mest,
-        pobocka: pobocka ? String(pobocka.name || '') : null });
+        pobocka: pobocka ? String(pobocka.name || '') : null,
+        // Města v buňce. Hra z nich pozná, kde se dá rovnou zřídit pobočka —
+        // bez ní si území vzít nejde a chodit kvůli tomu na mapu a zpátky je
+        // zbytečná cesta.
+        mesta: mesta.map((m) => ({ key: m.key, name: m.name, lat: m.lat, lon: m.lon })) });
     }
     res.json({ ok: true, sousedi: out });
   } catch (e) { next(e); }

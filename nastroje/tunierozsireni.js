@@ -56,6 +56,25 @@ ok('sousedé se kreslí slabě a s plusem',
   /dashArray: '4 4'/.test(hra) && /uzemi-plus-pin/.test(hra));
 ok('plus otevře kartu souseda', /\.on\('click', function \(\) \{ unieSousedSheet\(n\); \}\)/.test(hra));
 ok('bez pobočky se nenabízí převzetí', /var muzu = !n\.drzi && !!n\.pobocka;/.test(hra));
+// Bez pobočky si území vzít nejde — a chodit kvůli ní na mapu a zpátky je
+// zbytečná cesta. Zřídí se rovnou z karty souseda.
+ok('pobočku jde zřídit rovnou z karty souseda',
+  /function unieSousedPobocka\(n\)/.test(hra) && /data-sous-pob=/.test(hra));
+ok('server pošle města té buňky', /mesta: mesta\.map\(\(m\) => \(\{ key: m\.key/.test(R));
+// Pobočka v neprozkoumaném městě by znamenala servis tam, kde hráč nikdy nebyl.
+ok('nabízejí se jen prozkoumaná města',
+  /znam = vse\.filter\(function \(m\) \{ return S\.areas && S\.areas\[m\.key\]; \}\)/.test(hra));
+const usekPob = (hra.match(/function unieSousedPobocka\(n\) \{[\s\S]*?\n\}/) || [''])[0];
+ok('funkce na zřízení pobočky se našla', usekPob.length > 200);
+ok('a bez peněz je tlačítko zhasnuté',
+  /S\.cash < POBOCKA_CENA \? ' disabled' : ''/.test(usekPob));
+ok('je na něm vidět, co to stojí teď i měsíčně',
+  /veta\.unie_soused_pobocka_cena[\s\S]{0,120}POBOCKA_CENA, p2: POBOCKA_MESICNE/.test(usekPob));
+// Server o pobočce ví až po uložení stavu — bez nového natažení by karta dál
+// tvrdila, že tam pobočku nemáš, a tlačítko „Rozšířit" by se neobjevilo.
+ok('po zřízení se sousedé natáhnou znovu',
+  /UZEMI_SOUSEDI = null;\s*\n\s*nactiSousedy\(function \(\) \{[\s\S]{0,260}unieSousedSheet\(novy \|\| n\)/.test(hra));
+ok('a stav se pošle na server', /save\(\); paint\(\); syncState\(true\);[\s\S]{0,200}data-sous-pob|data-sous-pob[\s\S]{0,900}syncState\(true\)/.test(hra));
 ok('sousedi se tahají až se zapnutou vlaječkou',
   /UZEMI_VRSTVA && UZEMI_SOUSEDI == null/.test(hra));
 ok('po převzetí se mapa načte znovu', /UZEMI_SOUSEDI = null; UZEMI_MAPA = null; UNIE = null;/.test(hra));

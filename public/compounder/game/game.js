@@ -4299,6 +4299,28 @@ function kresliUzemi() {
   });
 }
 // Jeden soused: co v něm je a co stojí si ho vzít.
+// Pobočka rovnou odsud. Bez ní si území vzít nejde a chodit kvůli tomu na
+// mapu, najít město, zřídit a vrátit se je zbytečná cesta — zvlášť když hra
+// ví, která města v té buňce leží.
+//
+// Nabízejí se jen města, která hráč prozkoumal: pobočka v neprozkoumaném
+// městě by znamenala servis tam, kde ještě nikdy nebyl.
+function unieSousedPobocka(n) {
+  var vse = n.mesta || [];
+  var znam = vse.filter(function (m) { return S.areas && S.areas[m.key]; });
+  if (!znam.length) {
+    return vse.length
+      ? '<p class="fine">' + esc(tx('veta.unie_soused_prozkoumej', { p1: vse[0].name })) + '</p>'
+      : '';
+  }
+  return '<p class="fine">' + esc(tx('veta.unie_soused_pobocka_cena',
+      { p1: POBOCKA_CENA, p2: POBOCKA_MESICNE })) + '</p>'
+    + '<div class="gcard-act">' + znam.slice(0, 4).map(function (m) {
+        return '<button class="btn sec sm" data-sous-pob="' + esc(m.key) + '"'
+          + (S.cash < POBOCKA_CENA ? ' disabled' : '') + '>'
+          + esc(tx('unie.soused_zridit', { p1: m.name })) + '</button>';
+      }).join('') + '</div>';
+}
 function unieSousedSheet(n) {
   var cena = Math.max(0, Math.round(n.licence || 0));
   var muzu = !n.drzi && !!n.pobocka;
@@ -4314,11 +4336,34 @@ function unieSousedSheet(n) {
     + '<div class="kv souhrn"><span>' + esc(tx('hra.unie_licence')) + '</span><b>' + kcFull(cena) + '</b></div>'
     + (n.pobocka
       ? '<p class="fine ok">' + esc(tx('unie.soused_pobocka', { p1: n.pobocka })) + '</p>'
-      : '<p class="fine err">' + esc(tx('unie.soused_bez_pobocky')) + '</p>')
+      : '<p class="fine err">' + esc(tx('unie.soused_bez_pobocky')) + '</p>' + unieSousedPobocka(n))
     + (muzu
       ? '<button class="btn big" id="sous-ok" style="width:100%;margin-top:10px">'
         + esc(tx('unie.rozsirit')) + ' · ' + kcFull(cena) + '</button>'
       : ''));
+  // Zřízení pobočky rovnou z karty souseda. Platí se stejně jako v síti,
+  // jen se pak znovu načtou sousedé — s pobočkou už jde území vzít.
+  [].forEach.call(($('sheet-body') || document).querySelectorAll('[data-sous-pob]'), function (t) {
+    t.onclick = function () {
+      var m = (n.mesta || []).filter(function (x) { return x.key === t.getAttribute('data-sous-pob'); })[0];
+      if (!m) return;
+      if (S.cash < POBOCKA_CENA) return toast(esc(tx('drazba.na_tohle_nemas_volnou_hotovost')), 'err');
+      t.disabled = true;
+      S.cash -= POBOCKA_CENA;
+      zapis('nakup', tx('veta.pobocka', { p1: m.name }), -POBOCKA_CENA);
+      S.pobocky.push({ name: m.name, lat: m.lat, lon: m.lon, od: Date.now() });
+      save(); paint(); syncState(true);
+      toast(tx('veta.pobocka_v_otevrena', { p1: m.name }), 'ok');
+      // Server o pobočce ví až po uložení stavu, takže se sousedé natáhnou
+      // znovu — jinak by karta dál tvrdila, že tam pobočku nemáš.
+      UZEMI_SOUSEDI = null;
+      nactiSousedy(function () {
+        drawMap();
+        var novy = (UZEMI_SOUSEDI || []).filter(function (x) { return x.okres_key === n.okres_key; })[0];
+        unieSousedSheet(novy || n);
+      });
+    };
+  });
   var b = $('sous-ok');
   if (b) b.onclick = function () {
     if (cena > volnaHotovost(null)) return toast(esc(tx('drazba.na_tohle_nemas_volnou_hotovost')), 'err');
