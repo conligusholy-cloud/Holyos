@@ -508,6 +508,17 @@ if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|rout
   fi
 fi
 
+# Panel Unie: dvě hromádky a skládačka. Varování musí být vidět ze zavřeného
+# řádku — skládačka, která schová běžící výzvu, je past: hráč o území přijde
+# a ani se nedoví proč.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|public/compounder/game/game.css|services/game/texty/cs.json'; then
+  if ! node nastroje/tuniepanel.js; then
+    echo ""
+    echo "STOP: panel Unie nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Rozšiřování území o sousední buňky. Území si smíš vzít jen tam, kam
 # dosáhneš servisem — jinak jde skoupit půl republiky od stolu.
 if git diff --cached --name-only | grep -qE 'services/game/okresy|services/game/sit|routes/game-unie|public/compounder/game/game.js'; then

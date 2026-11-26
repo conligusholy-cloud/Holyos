@@ -1286,6 +1286,30 @@ button.kv:active{background:rgba(124,92,255,.12)}
 /* Malý graf na kartě burzy: jde o tvar, ne o čtení čísel. */
 .fond-graf.graf-maly{height:44px;margin:2px 0}
 
+/* Panel Unie: každé území je řádek, co se rozklikne. Sloupec plných karet
+   se u pěti území nedal přečíst a hlavní otázka — jak velké území mám a jak
+   se mi v něm daří — se ztrácela mezi posuvníky a seznamy míst. */
+.sklad{margin:0 0 10px}
+.sklad>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  cursor:pointer;list-style:none}
+.sklad>summary::-webkit-details-marker{display:none}
+/* Šipka napravo od čísla. Otočí se, když je řádek rozbalený — bez ní není
+   poznat, že se na řádek dá klepnout. */
+.sklad>summary::after{content:'';flex:none;width:7px;height:7px;margin-left:2px;
+  border-right:2px solid var(--text2);border-bottom:2px solid var(--text2);
+  transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s}
+.sklad[open]>summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+.sk-nm{min-width:0;font-weight:700;font-size:14.5px}
+.sk-nm i{display:block;font-style:normal;font-weight:400;font-size:11.5px;
+  color:var(--text2);line-height:1.45;margin-top:2px}
+.sk-nm i b{font-weight:700}
+.sklad>summary>b{white-space:nowrap;font-size:14px}
+.sklad-telo{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+/* Skupiny míst uvnitř území: tenčí, ať je poznat, že patří dovnitř. */
+.sklad.vnitrni{margin:8px 0 0;padding:8px 10px;border:1px solid var(--border);border-radius:12px}
+.sklad.vnitrni>summary .sk-nm{font-weight:600;font-size:13px}
+.sklad.vnitrni .sklad-telo{margin-top:8px;padding-top:8px}
+
 /* Cena akcie. Čára plus plocha pod ní, která se dolů vytrácí — samotná tenká
    linka v tmavé kartě vypadala jako čárka tužkou. Barvu drží `color`, takže
    si ji čára i přechod berou samy přes currentColor a mění se jedním řádkem

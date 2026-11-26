@@ -8128,7 +8128,10 @@ function unieMeritko(d) {
       : '<p class="fine">' + esc(tx('hra.unie_meritko_zatim')) + '</p>')
     + '<button class="odkaz" id="unie-do-zebricku">' + esc(tx('hra.unie_do_zebricku')) + '</button></div>';
 }
-function unieUzemiKarta(u, nast) {
+// `holy` = vrať jen vnitřek, bez obalu karty. Používá to skládačka v panelu:
+// karta je tam samo <details> a karta v kartě vypadá jako chyba.
+function unieUzemiKarta(u, nast, holy) {
+  var obal = function (vnitrek) { return holy ? vnitrek : '<div class="card">' + vnitrek + '</div>'; };
   var pasmo = '<input type="range" class="unie-pct" data-uzemi="' + esc(u.okres_key) + '" min="' + u.poplatek_min
     + '" max="' + u.poplatek_max + '" step="5" value="' + u.poplatek_pct + '">';
   var nespBar = '<div class="unie-bar"><i style="width:' + Math.max(2, u.nespokojenost) + '%"></i></div>';
@@ -8155,17 +8158,16 @@ function unieUzemiKarta(u, nast) {
         ? '<div class="kv"><span>' + esc(tx('hra.unie_operator')) + '</span><b>'
           + esc(u.operator_nick) + ' (' + u.operator_podil + ' %)</b></div>'
         : '');
-    return '<div class="card"><div class="row"><h3>' + esc(u.nazev || u.okres_key) + '</h3><b>' + esc(u.master_nick) + '</b></div>'
+    return obal('<div class="row"><h3>' + esc(u.nazev || u.okres_key) + '</h3><b>' + esc(u.master_nick) + '</b></div>'
       + '<div class="kv"><span>' + esc(tx('hra.unie_poplatek')) + '</span><b>' + u.poplatek_pct + ' %</b></div>'
       + '<div class="kv"><span>' + esc(tx('hra.unie_nespokojenost')) + '</span><b>' + u.nespokojenost + ' / 100</b></div>'
       + nespBar + zavazek + lic + vyzva
       + (u.duvod_vyzvy && !u.vyzyvatel_nick
         ? '<button class="btn sm" data-unie-vyzva="' + esc(u.okres_key) + '" data-licence="' + (u.licence || 0) + '">'
           + esc(tx('hra.unie_vyzvat')) + '</button><p class="fine">' + esc(unieDuvod(u.duvod_vyzvy)) + '</p>'
-        : '<p class="fine">' + esc(tx('hra.unie_zatim_drzi')) + '</p>')
-      + '</div>';
+        : '<p class="fine">' + esc(tx('hra.unie_zatim_drzi')) + '</p>'));
   }
-  return '<div class="card"><div class="row"><h3>' + esc(u.nazev || u.okres_key) + '</h3><b class="ok">' + esc(tx('hra.unie_moje_uzemi')) + '</b></div>'
+  return obal('<div class="row"><h3>' + esc(u.nazev || u.okres_key) + '</h3><b class="ok">' + esc(tx('hra.unie_moje_uzemi')) + '</b></div>'
     + '<div class="kv"><span>' + esc(tx('hra.unie_stroju')) + '</span><b>' + cislo1(u.stroju || 0)
     + (u.cizich ? ' <i class="muted small">' + tx('veta.unie_z_toho_cizich', { p1: cislo1(u.cizich) }) + '</i>' : '')
     + '</b></div>'
@@ -8197,7 +8199,7 @@ function unieUzemiKarta(u, nast) {
       ? '<button class="btn sec sm" data-unie-vypsat="' + esc(u.okres_key) + '">'
         + esc(tx('hra.unie_vypsat_licenci')) + '</button>'
       : '')
-    + '</div>' + vyzva + '</div>';
+    + '</div>' + vyzva);
 }
 // Moje místa v území: co na nich je hotové a co se dá nabídnout dál. Je to
 // masterův sklad — bez něj by musel hledat po mapě, co v okrese vlastně má.
@@ -8237,29 +8239,31 @@ function unieMistaHtml(u) {
   var visi = l.filter(function (m) { return m.na_marketu; });
   var lze = l.filter(function (m) { return !m.na_marketu && (m.model || m.pripojky); });
   var rozdelane = l.filter(function (m) { return !m.na_marketu && !m.model && !m.pripojky; });
-  var skupina = function (nadpis, pocet, telo) {
+  // Každá skupina je zase skládačka: master má v území klidně třicet míst
+  // a vypsaná pod sebou by z karty udělala seznam, ve kterém se nedá nic najít.
+  var skupina = function (klic, nadpis, pocet, telo) {
     if (!pocet) return '';
-    return '<p class="muted small" style="margin:12px 0 2px"><b>' + esc(nadpis)
-      + '</b> · ' + pocet + '</p>' + telo;
+    return unieSkladacka('m:' + u.okres_key + ':' + klic,
+      unieRadek(nadpis, '', cislo1(pocet), 'muted'), telo, 'vnitrni');
   };
   return '<h4 style="margin:14px 0 2px">' + esc(tx('unie.moje_mista')) + '</h4>'
     + '<p class="muted small" style="margin:0 0 6px">' + esc(tx('unie.moje_mista_popis')) + '</p>'
-    + skupina(tx('unie.mista_lze'), lze.length, lze.map(function (m) {
+    + skupina('lze', tx('unie.mista_lze'), lze.length, lze.map(function (m) {
         return unieMistoRadek(m.nazev, esc(m.mesto) + ' · ' + esc(unieMistoStav(m)),
           '<button class="btn sm sec" data-market-mista="' + esc(m.spot_id) + '">'
           + esc(tx('unie.misto_nabidnout')) + '</button>');
       }).join(''))
-    + skupina(tx('unie.mista_visi_nadpis'), visi.length, visi.map(function (m) {
+    + skupina('visi', tx('unie.mista_visi_nadpis'), visi.length, visi.map(function (m) {
         return unieMistoRadek(m.nazev, esc(m.mesto) + ' · ' + esc(unieMistoStav(m)),
           '<b class="ok">' + esc(tx('unie.misto_visi')) + '</b>');
       }).join(''))
-    + skupina(tx('unie.mista_rozdelane'), rozdelane.length, rozdelane.map(function (m) {
+    + skupina('rozdelane', tx('unie.mista_rozdelane'), rozdelane.length, rozdelane.map(function (m) {
         return unieMistoRadek(m.nazev, esc(m.mesto) + ' · ' + esc(unieMistoStav(m)),
           '<b class="muted small">' + esc(tx('unie.misto_dodelat')) + '</b>');
       }).join(''))
     // Volná místa jsou to, co masterovi dělá sklad: najde je, připraví
     // a nabídne. Bez nich byl seznam jen přehledem toho, co už stojí.
-    + skupina(tx('unie.mista_volna'), volna.length,
+    + skupina('volna', tx('unie.mista_volna'), volna.length,
         '<p class="fine">' + esc(tx('unie.mista_volna_popis')) + '</p>'
         + volna.slice(0, UNIE_VOLNYCH).map(function (r) {
             return unieMistoRadek(r.sp.name || tx('hra.misto_4'),
@@ -8293,38 +8297,112 @@ function unieDuvod(k) {
   if (k === 'licence') return tx('hra.unie_duvod_licence');
   return '';
 }
+// ─── Skládačka ───────────────────────────────────────────────────────────────
+// Panel Unie byl sloupec plných karet pod sebou: u pěti území se v něm nedalo
+// nic najít a hlavní otázka — jak velké území mám a jak se mi v něm daří —
+// se ztrácela mezi posuvníky a seznamy míst. Každé území je proto řádek, co
+// se rozklikne.
+//
+// Co je rozbalené, si hra pamatuje: panel se překresluje po každé doručence
+// a bez paměti by se všechno pokaždé zase sbalilo pod rukama.
+var UNIE_OTEVRENO = {};
+function unieSkladacka(klic, hlavicka, telo, trida) {
+  return '<details class="sklad ' + (trida || '') + '" data-sklad="' + esc(klic) + '"'
+    + (UNIE_OTEVRENO[klic] ? ' open' : '') + '>'
+    + '<summary>' + hlavicka + '</summary>'
+    + '<div class="sklad-telo">' + telo + '</div></details>';
+}
+// Hlavička řádku: název, pod ním drobně to podstatné, vpravo jedno číslo.
+function unieRadek(nazev, pod, vpravo, trida) {
+  return '<span class="sk-nm">' + esc(nazev) + (pod ? '<i>' + pod + '</i>' : '') + '</span>'
+    + '<b class="' + (trida || '') + '">' + vpravo + '</b>';
+}
+// Moje území: kolik v něm stojí prádlomatů a co nese. Červeně, když je něco
+// v nepořádku — nespokojenost nad prahem, nesplněný závazek nebo běžící výzva.
+// Tohle musí být vidět ze zavřeného řádku, jinak je skládačka past.
+function unieMojeRadek(u) {
+  var pod = esc(tx('veta.unie_radek_stroju', { p1: cislo1(u.stroju || 0), p2: cislo1(u.cizich || 0) }));
+  // Jedno varování, to nejhorší. Dvě by řádek zalomila na tři řádky a hráč
+  // by stejně řešil napřed to vážnější.
+  if (u.vyzyvatel_nick) pod += ' · <b class="err">' + esc(tx('unie.radek_vyzva')) + '</b>';
+  else if (u.nespokojenost >= u.vyzva_prah) pod += ' · <b class="err">' + esc(tx('unie.radek_nespokojeno')) + '</b>';
+  else if (u.zavazek_pridano < u.zavazek) pod += ' · <b class="warn">' + esc(tx('unie.radek_zavazek')) + '</b>';
+  // Číslo vpravo je příjem, a ten je v pořádku i u území, které má problém.
+  // Červené by tvrdilo, že se nevyplácí — a to je jiná věc než nespokojenost.
+  return unieRadek(u.nazev || u.okres_key, pod, kcFull(u.prijem_mesic || 0), 'ok');
+}
+// Cizí území: kdo ho drží a jestli se o něj dá soutěžit.
+function unieCiziRadek(u) {
+  var pod = esc(tx('veta.unie_radek_drzi', { p1: u.master_nick }))
+    + ' · ' + esc(tx('veta.unie_radek_nespokojenost', { p1: u.nespokojenost }));
+  var lze = u.duvod_vyzvy && !u.vyzyvatel_nick;
+  return unieRadek(u.nazev || u.okres_key, pod,
+    esc(lze ? tx('unie.radek_lze_vyzvat') : tx('unie.radek_drzi_se')), lze ? 'ok' : 'muted');
+}
+// Volné území: nikdo ho nedrží, stačí zaplatit licenci.
+function unieVolneRadek(v) {
+  var pod = esc(tx('veta.unie_radek_volna_mista', { p1: cislo1(v.volnych), p2: cislo1(v.mist) }));
+  return unieRadek(v.nazev || v.okres_key, pod, kcFull(v.licence), 'ok');
+}
+function unieVolneKarta(v) {
+  return '<div class="kv"><span>' + esc(tx('hra.unie_volnych_mist')) + '</span><b>'
+    + cislo1(v.volnych) + ' / ' + cislo1(v.mist) + '</b></div>'
+    + (v.obyvatel ? '<div class="kv"><span>' + esc(tx('unie.obyvatel')) + '</span><b>'
+        + cislo1(v.obyvatel) + '</b></div>' : '')
+    + (v.mest > 1 ? '<div class="kv"><span>' + esc(tx('unie.mest_v_okrese')) + '</span><b>'
+        + cislo1(v.mest) + '</b></div>' : '')
+    + '<div class="kv"><span>' + esc(tx('hra.unie_prumerne_skore')) + '</span><b>' + v.skore + '</b></div>'
+    + '<div class="kv"><span>' + esc(tx('hra.unie_zavazek')) + '</span><b>' + cislo1(v.zavazek) + '</b></div>'
+    + '<div class="kv souhrn"><span>' + esc(tx('hra.unie_licence')) + '</span><b>' + kcFull(v.licence) + '</b></div>'
+    + '<p class="fine">' + esc(tx('hra.unie_prevzeti_popis')) + '</p>'
+    + '<button class="btn sm" data-unie-prevzit="' + esc(v.okres_key) + '" data-cena="' + v.licence + '">'
+    + esc(tx('hra.unie_prevzit')) + '</button>';
+}
+// Nadpis oddílu s počtem a souhrnem — hlavní otázka panelu je „jak velké
+// území mám a jak se mi v něm daří", a ta se odpovídá právě tady.
+function unieOddil(nadpis, pocet, souhrn) {
+  return '<h3 style="margin:16px 0 8px">' + esc(nadpis)
+    + ' <span class="muted small" style="font-weight:600">· ' + cislo1(pocet)
+    + (souhrn ? ' · ' + souhrn : '') + '</span></h3>';
+}
 function unieHtml(d) {
   var r = d.role || {};
+  var nast = d.nastaveni || {};
+  var moje = (d.uzemi || []).filter(function (u) { return u.moje; });
+  var cizi = (d.uzemi || []).filter(function (u) { return !u.moje; });
+  var volne = (r.master && (d.volne || [])) || [];
   var h = unieRole(d);
-  if ((d.uzemi || []).length) {
-    h += '<h3 style="margin:16px 0 8px">' + esc(tx('hra.unie_uzemi')) + '</h3>'
-      + d.uzemi.map(function (u) { return unieUzemiKarta(u, d.nastaveni || {}); }).join('');
+
+  if (moje.length) {
+    var nese = moje.reduce(function (a, u) { return a + (u.prijem_mesic || 0); }, 0);
+    h += unieOddil(tx('unie.oddil_moje'), moje.length, kcFull(nese))
+      + moje.map(function (u) {
+          return unieSkladacka('u:' + u.okres_key, unieMojeRadek(u),
+            unieUzemiKarta(u, nast, true), 'card');
+        }).join('');
+  }
+  // Kde se dá soutěžit: volná území i ta cizí. Obojí je jedna otázka — kam
+  // se dá růst — a dvě oddělené hromádky by ji rozdělily na půl.
+  if (cizi.length || volne.length) {
+    h += unieOddil(tx('unie.oddil_soutez'), cizi.length + volne.length, '')
+      + volne.map(function (v) {
+          return unieSkladacka('v:' + v.okres_key, unieVolneRadek(v),
+            unieVolneKarta(v), 'card');
+        }).join('')
+      + cizi.map(function (u) {
+          return unieSkladacka('c:' + u.okres_key, unieCiziRadek(u),
+            unieUzemiKarta(u, nast, true), 'card');
+        }).join('');
   }
   if ((d.licence || []).length) {
-    h += '<h3 style="margin:16px 0 8px">' + esc(tx('hra.unie_moje_licence')) + '</h3>'
+    h += unieOddil(tx('hra.unie_moje_licence'), d.licence.length, '')
       + d.licence.map(function (l) {
         return '<div class="card"><div class="row"><h3>' + esc(l.okres_key) + '</h3><b>' + l.podil_pct + ' %</b></div>'
           + '<p class="fine">' + esc(tx('veta.unie_licence_popis', { p1: String(l.podil_pct) })) + '</p>'
           + '<button class="btn sec sm" data-unie-zrusit="' + esc(l.okres_key) + '">' + esc(tx('hra.unie_zrusit_licenci')) + '</button></div>';
       }).join('');
   }
-  if (r.master && (d.volne || []).length) {
-    h += '<h3 style="margin:16px 0 8px">' + esc(tx('hra.unie_volna_uzemi')) + '</h3>'
-      + d.volne.map(function (v) {
-        return '<div class="card"><div class="row"><h3>' + esc(v.nazev || v.okres_key) + '</h3><b>' + kcFull(v.licence) + '</b></div>'
-          + '<div class="kv"><span>' + esc(tx('hra.unie_volnych_mist')) + '</span><b>' + cislo1(v.volnych) + ' / ' + cislo1(v.mist) + '</b></div>'
-          + (v.obyvatel ? '<div class="kv"><span>' + esc(tx('unie.obyvatel')) + '</span><b>'
-              + cislo1(v.obyvatel) + '</b></div>' : '')
-          + (v.mest > 1 ? '<div class="kv"><span>' + esc(tx('unie.mest_v_okrese')) + '</span><b>'
-              + cislo1(v.mest) + '</b></div>' : '')
-          + '<div class="kv"><span>' + esc(tx('hra.unie_prumerne_skore')) + '</span><b>' + v.skore + '</b></div>'
-          + '<div class="kv"><span>' + esc(tx('hra.unie_zavazek')) + '</span><b>' + cislo1(v.zavazek) + '</b></div>'
-          + '<p class="fine">' + esc(tx('hra.unie_prevzeti_popis')) + '</p>'
-          + '<button class="btn sm" data-unie-prevzit="' + esc(v.okres_key) + '" data-cena="' + v.licence + '">'
-          + esc(tx('hra.unie_prevzit')) + '</button></div>';
-      }).join('');
-  }
-  if (!r.master && !(d.licence || []).length && !(d.uzemi || []).length) {
+  if (!moje.length && !cizi.length && !volne.length) {
     h += '<p class="muted small">' + esc(tx('hra.unie_zatim_nic')) + '</p>';
   }
   return h;
@@ -8409,6 +8487,13 @@ function bindUnie() {
       });
       if (m) marketVypsatMistoSheet(m);
     };
+  });
+  // Co je rozbalené, si pamatujeme. Panel se překresluje po každé doručence
+  // a bez toho by se hráči všechno pod rukama zase sbalilo.
+  [].forEach.call(box.querySelectorAll('[data-sklad]'), function (d) {
+    d.addEventListener('toggle', function () {
+      UNIE_OTEVRENO[d.getAttribute('data-sklad')] = d.open;
+    });
   });
   // Volné místo v území. Hra ho zná ze svých prozkoumaných měst, takže se
   // otevře rovnou jeho karta — odsud se dá zabrat a připravit.
