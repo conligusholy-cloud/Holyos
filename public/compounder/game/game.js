@@ -8203,8 +8203,14 @@ function unieUzemiKarta(u, nast, holy) {
     ? '<p class="err" style="margin:6px 0 0">' + esc(tx('veta.unie_vyzva_bezi', { p1: u.vyzyvatel_nick, p2: kcFull(u.vyzyvatel_cena || 0) })) + '</p>'
       + (u.moje ? '<button class="btn sm" data-unie-dorovnat="' + esc(u.okres_key) + '">' + esc(tx('hra.unie_dorovnat')) + '</button>' : '')
     : '';
+  // Číslo „0 / 4" samo o sobě je hádanka. Co to je a co se stane, když se to
+  // nesplní, musí stát rovnou pod ním — jinak hráč kouká na varování, kterému
+  // nerozumí, a nic s ním neudělá. Věta je stejná pro moje i cizí území:
+  // platí pro toho, kdo ho drží, ať je to kdokoli.
   var zavazek = '<div class="kv"><span>' + esc(tx('hra.unie_zavazek')) + '</span><b>'
-    + cislo1(u.zavazek_pridano) + ' / ' + cislo1(u.zavazek) + '</b></div>';
+    + cislo1(u.zavazek_pridano) + ' / ' + cislo1(u.zavazek) + '</b></div>'
+    + '<p class="fine">' + esc(tx('veta.unie_zavazek_popis', { p1: cislo1(u.zavazek),
+      p2: mn(u.zavazek, tx('hra.pradlomat'), tx('hra.pradlomaty_4'), tx('hra.pradlomatu')) })) + '</p>';
   if (!u.moje) {
     // Nabídnutá operátorská licence. Master ji vypíše, ale přijmout ji dosud
     // nebylo kde — visela v cizí kartě jako údaj, ne jako nabídka.
@@ -8363,7 +8369,11 @@ function unieCoDal(u) {
   else if (!u.cizich) rada = tx('hra.unie_rada_nikdo');
   // Rada „sežeň si operátora" dává smysl, jen když operátor existuje.
   else if (u.operator_zapnut && !u.operator_nick && !u.operator_cena) rada = tx('hra.unie_rada_operator');
-  else if (u.zavazek_pridano < u.zavazek) rada = tx('veta.unie_rada_zavazek', { p1: cislo1(u.zavazek - u.zavazek_pridano) });
+  else if (u.zavazek_pridano < u.zavazek) {
+    var zbyva = Math.max(0, u.zavazek - u.zavazek_pridano);
+    rada = tx('veta.unie_rada_zavazek', { p1: cislo1(zbyva),
+      p2: mn(zbyva, tx('hra.pradlomat'), tx('hra.pradlomaty_4'), tx('hra.pradlomatu')) });
+  }
   else if (u.nespokojenost >= u.vyzva_prah) rada = tx('hra.unie_rada_nespokojenost');
   else rada = tx('hra.unie_rada_rust');
   return '<p class="fine" style="margin:8px 0 0;padding:8px 10px;border-radius:10px;background:rgba(124,92,255,.10)">'
@@ -8404,7 +8414,13 @@ function unieMojeRadek(u) {
   // by stejně řešil napřed to vážnější.
   if (u.vyzyvatel_nick) pod += ' · <b class="err">' + esc(tx('unie.radek_vyzva')) + '</b>';
   else if (u.nespokojenost >= u.vyzva_prah) pod += ' · <b class="err">' + esc(tx('unie.radek_nespokojeno')) + '</b>';
-  else if (u.zavazek_pridano < u.zavazek) pod += ' · <b class="warn">' + esc(tx('unie.radek_zavazek')) + '</b>';
+  else if (u.zavazek_pridano < u.zavazek) {
+    // Samotné slovo „závazek" hráči nic neřeklo — nevěděl, co po něm území
+    // chce ani kolik toho zbývá. Na odznaku je proto rovnou to, co chybí.
+    var chybi = Math.max(0, u.zavazek - u.zavazek_pridano);
+    pod += ' · <b class="warn">' + esc(tx('veta.unie_radek_zavazek_chybi', { p1: cislo1(chybi),
+      p2: mn(chybi, tx('hra.pradlomat'), tx('hra.pradlomaty_4'), tx('hra.pradlomatu')) })) + '</b>';
+  }
   // Číslo vpravo je příjem, a ten je v pořádku i u území, které má problém.
   // Červené by tvrdilo, že se nevyplácí — a to je jiná věc než nespokojenost.
   return unieRadek(u.nazev || u.okres_key, pod, kcFull(u.prijem_mesic || 0), 'ok');

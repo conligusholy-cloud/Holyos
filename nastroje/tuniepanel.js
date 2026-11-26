@@ -43,6 +43,7 @@ const box = {
     (_, n) => (u && u[n] != null ? String(u[n]) : '')),
   kcFull: (n) => Math.round(n) + ' L$',
   cislo1: (n) => String(n),
+  mn: (n, a, b, c) => (n === 1 ? a : (n >= 2 && n <= 4) ? b : c),
 };
 vm.createContext(box);
 vm.runInContext('var UNIE_OTEVRENO = {};' + kusy.join('\n'), box);
@@ -66,12 +67,21 @@ ok('běžící výzva je vidět ze zavřeného řádku',
   box.unieMojeRadek(uzemi({ vyzyvatel_nick: 'Karel' })).indexOf(KAT['unie.radek_vyzva']) >= 0);
 ok('nespokojenost nad prahem taky',
   box.unieMojeRadek(uzemi({ nespokojenost: 55 })).indexOf(KAT['unie.radek_nespokojeno']) >= 0);
-ok('nesplněný závazek taky',
-  box.unieMojeRadek(uzemi({ zavazek_pridano: 0 })).indexOf(KAT['unie.radek_zavazek']) >= 0);
+// Samotné slovo „závazek" na odznaku byla hádanka: hráč nevěděl, co po něm
+// území chce ani kolik toho zbývá. Na odznaku musí stát to, co chybí.
+const seZavazkem = box.unieMojeRadek(uzemi({ zavazek: 4, zavazek_pridano: 0 }));
+ok('nesplněný závazek je vidět ze zavřeného řádku', seZavazkem.indexOf('warn') >= 0);
+ok('a je na něm, kolik prádlomatů chybí',
+  seZavazkem.indexOf('chybí 4 prádlomaty') >= 0, seZavazkem);
+ok('skloňuje se podle počtu',
+  box.unieMojeRadek(uzemi({ zavazek: 1, zavazek_pridano: 0 })).indexOf('chybí 1 prádlomat') >= 0
+  && box.unieMojeRadek(uzemi({ zavazek: 7, zavazek_pridano: 0 })).indexOf('chybí 7 prádlomatů') >= 0);
+ok('počítá se, co zbývá, ne celý závazek',
+  box.unieMojeRadek(uzemi({ zavazek: 4, zavazek_pridano: 3 })).indexOf('chybí 1 prádlomat') >= 0);
 ok('klidné území žádné varování nemá',
   klid.indexOf(KAT['unie.radek_vyzva']) < 0
   && klid.indexOf(KAT['unie.radek_nespokojeno']) < 0
-  && klid.indexOf(KAT['unie.radek_zavazek']) < 0);
+  && klid.indexOf('chybí') < 0);
 // Jedno varování, to nejhorší. Dvě by řádek zalomila na tři řádky.
 ok('při výzvě se nespokojenost nepřidává',
   box.unieMojeRadek(uzemi({ vyzyvatel_nick: 'Karel', nespokojenost: 90 }))
@@ -199,6 +209,25 @@ ok('panel Unie je v řadě překreslování hry',
   /else if \(!\$\('net-unie'\)\.classList\.contains\('hidden'\)\) unieHlidej\(\);/.test(hra));
 ok('a otisk se zapisuje při každém překreslení panelu',
   /UNIE_OTISK = unieOtisk\(\);/.test(hra));
+
+// ─── Co je rozvojový závazek ────────────────────────────────────────────────
+// „Rozvojový závazek 0 / 4" samo o sobě je hádanka. Co to je a co se stane,
+// když se to nesplní, musí stát rovnou pod tím — jinak hráč kouká na
+// varování, kterému nerozumí, a nic s ním neudělá.
+const karta = hra.slice(hra.indexOf('function unieUzemiKarta(u, nast, holy)'),
+  hra.indexOf('function unieUzemiKarta(u, nast, holy)') + 3000);
+ok('pod číslem závazku stojí, co to je',
+  /veta\.unie_zavazek_popis/.test(karta));
+ok('a ta věta říká, co se stane, když se nesplní',
+  /vyzvat/.test(KAT['veta.unie_zavazek_popis'] || ''));
+ok('skloňuje se i tam',
+  /mn\(u\.zavazek, tx\('hra\.pradlomat'\)/.test(karta));
+ok('rada „Co teď" skloňuje taky',
+  /veta\.unie_rada_zavazek', \{ p1: cislo1\(zbyva\),\n      p2: mn\(zbyva/.test(hra)
+  && (KAT['veta.unie_rada_zavazek'] || '').indexOf('{p2}') > 0);
+// Mrtvý odznak se nemá kam vrátit.
+ok('holé slovo „závazek" z katalogu zmizelo',
+  !KAT['unie.radek_zavazek'] && hra.indexOf('unie.radek_zavazek') < 0);
 
 // ─── Styl ────────────────────────────────────────────────────────────────────
 ok('skládačka má vlastní styl', /\.sklad>summary\{/.test(css));
