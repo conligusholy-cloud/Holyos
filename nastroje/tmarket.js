@@ -21,6 +21,7 @@ function ok(co, podminka, detail) {
 const koren = path.join(__dirname, '..');
 const cti = (p) => fs.readFileSync(path.join(koren, p), 'utf8');
 const R = cti('routes/game-trade.routes.js');
+const KATALOG = JSON.parse(cti('services/game/texty/cs.json'));
 const hra = cti('public/compounder/game/game.js');
 
 // ─── Pobočka v lokalitě ──────────────────────────────────────────────────────
@@ -161,9 +162,19 @@ ok('karta území místa ukazuje', /unieMistaHtml\(u\)/.test(hra));
 // a co je v území ještě volné.
 ok('nabídnout jde jen připravené místo nebo místo se strojem',
   /var lze = l\.filter\(function \(m\) \{ return !m\.na_marketu && \(m\.model \|\| m\.pripojky\); \}\);/.test(hra));
+// Rozdělané místo nabízet nejde — chybí mu přípojky. Řádek ale nese akci,
+// kterou se to spraví: „chybí přípojky" samo o sobě je jen konstatování
+// a hráč pak panel zavře a jde je hledat na mapu.
 ok('rozdělané místo se nenabízí, ale je vidět',
-  /var rozdelane = l\.filter\(function \(m\) \{ return !m\.na_marketu && !m\.model && !m\.pripojky; \}\);/.test(hra)
-  && /unie\.misto_dodelat/.test(hra));
+  /var rozdelane = l\.filter\(function \(m\) \{ return !m\.na_marketu && !m\.model && !m\.pripojky; \}\);/.test(hra));
+ok('a nese rovnou akci, jak ho dodělat',
+  /skupina\('rozdelane'[\s\S]{0,400}data-unie-misto="' \+ esc\(m\.spot_id\)[\s\S]{0,120}hra\.natahnout_pripojky/.test(hra));
+ok('místo visící na Market place se dá odsud otevřít',
+  /skupina\('visi'[\s\S]{0,400}data-unie-market/.test(hra)
+  && /t\.onclick = function \(\) \{ marketSheet\(\); \};/.test(hra));
+// Mrtvý popisek, co jen konstatoval stav, se nemá kam vrátit.
+ok('mrtvý popisek z katalogu zmizel',
+  !KATALOG['unie.misto_dodelat'] && hra.indexOf('unie.misto_dodelat') < 0);
 // Volná místa v území jsou to, co masterovi dělá sklad. Bez nich byl seznam
 // jen přehledem toho, co už stojí — a nebylo z čeho vybírat, co připravit.
 ok('volná místa v území jsou v seznamu taky', /function unieVolnaVUzemi\(u\)/.test(hra)

@@ -8253,13 +8253,17 @@ function unieMistaHtml(u) {
           '<button class="btn sm sec" data-market-mista="' + esc(m.spot_id) + '">'
           + esc(tx('unie.misto_nabidnout')) + '</button>');
       }).join(''))
+    // Každý řádek nese akci, ne jen stav. „Chybí přípojky" samo o sobě je
+    // jen konstatování — hráč pak zavře panel a jde je hledat na mapu.
     + skupina('visi', tx('unie.mista_visi_nadpis'), visi.length, visi.map(function (m) {
         return unieMistoRadek(m.nazev, esc(m.mesto) + ' · ' + esc(unieMistoStav(m)),
-          '<b class="ok">' + esc(tx('unie.misto_visi')) + '</b>');
+          '<button class="btn sm sec" data-unie-market="1">'
+          + esc(tx('unie.misto_na_market')) + '</button>');
       }).join(''))
     + skupina('rozdelane', tx('unie.mista_rozdelane'), rozdelane.length, rozdelane.map(function (m) {
         return unieMistoRadek(m.nazev, esc(m.mesto) + ' · ' + esc(unieMistoStav(m)),
-          '<b class="muted small">' + esc(tx('unie.misto_dodelat')) + '</b>');
+          '<button class="btn sm sec" data-unie-misto="' + esc(m.spot_id) + '">'
+          + esc(tx('hra.natahnout_pripojky')) + '</button>');
       }).join(''))
     // Volná místa jsou to, co masterovi dělá sklad: najde je, připraví
     // a nabídne. Bez nich byl seznam jen přehledem toho, co už stojí.
@@ -8494,6 +8498,11 @@ function bindUnie() {
     d.addEventListener('toggle', function () {
       UNIE_OTEVRENO[d.getAttribute('data-sklad')] = d.open;
     });
+  });
+  // Místo, které visí na Market place: otevře se výloha, odkud se dá nabídka
+  // prohlédnout i stáhnout.
+  [].forEach.call(box.querySelectorAll('[data-unie-market]'), function (t) {
+    t.onclick = function () { marketSheet(); };
   });
   // Volné místo v území. Hra ho zná ze svých prozkoumaných měst, takže se
   // otevře rovnou jeho karta — odsud se dá zabrat a připravit.
