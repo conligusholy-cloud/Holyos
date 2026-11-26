@@ -113,6 +113,44 @@ async function sousedi(key) {
 // Pořadí je důležité: území se musí převést DŘÍV, než se městům přepočítají
 // klíče, protože staré území se k městu dohledává právě přes ten starý klíč.
 let PREVEDENO = false;
+
+// Území, které se na buňku převést nedá, se ruší a licence se vrací.
+//
+// Zůstával po něm duch: řádek s klíčem města místo buňky. Neměl obrys, takže
+// se nedal na mapě vykreslit; neměl ani jediné město, takže v něm nestál
+// žádný prádlomat a nic nenesl. Hráč v panelu viděl území, které nic nedělá,
+// a přesto po něm chtělo rozvojový závazek a dalo se o něj vyzvat.
+//
+// Vrací se licence, kterou za území platil. Je to naše změna pravidel, ne
+// jeho chyba — a za nic, co by dostal, tu nezaplatil.
+async function zrusNeprevedene(t, duvod) {
+  const cena = Math.max(0, Math.round(t.licence || 0));
+  console.warn('[game] území', t.okres_key, '— ruší se:', duvod);
+  // Operátorská licence na tomhle území padá s ním; její majitel dostane
+  // svoje peníze zpátky stejně jako master.
+  const lic = await prisma.gameOperatorLicence.findMany({
+    where: { okres_key: t.okres_key, zrusena: false } }).catch(() => []);
+  for (const l of lic) {
+    await prisma.gameOperatorLicence.update({ where: { id: l.id },
+      data: { zrusena: true, do_kdy: new Date() } }).catch(() => {});
+    const c = Math.max(0, Math.round(l.cena || 0));
+    if (c > 0) {
+      await prisma.gameDelivery.create({ data: { player_id: l.player_id, kind: 'cash',
+        amount: c, spot_id: 'unie:zanik-lic:' + l.id,
+        text_kod: 'dor.unie_uzemi_zaniklo_operator', text_data: { p1: t.okres_key, penize: c },
+        popis: 'Území ' + t.okres_key + ' zaniklo — operátorská licence se vrací' } }).catch(() => {});
+    }
+  }
+  await prisma.gameTerritory.delete({ where: { id: t.id } }).catch(() => {});
+  if (t.master_id) {
+    await prisma.gameDelivery.create({ data: { player_id: t.master_id, kind: 'cash',
+      amount: cena, spot_id: 'unie:zanik:' + t.id,
+      text_kod: 'dor.unie_uzemi_zaniklo', text_data: { p1: t.okres_key, penize: cena },
+      popis: 'Území ' + t.okres_key + ' zaniklo — licence zpátky' } }).catch(() => {});
+  }
+  return true;
+}
+
 async function prevedStaraUzemi() {
   if (PREVEDENO) return 0;
   PREVEDENO = true;
@@ -128,12 +166,15 @@ async function prevedStaraUzemi() {
     }).catch(() => null);
     const key = mesto ? klicBodu(mesto.lat, mesto.lon) : null;
     if (!key) {
-      console.warn('[game] území', t.okres_key, '— nejde převést, město se nenašlo');
+      await zrusNeprevedene(t, 'město se nenašlo');
       continue;
     }
     const obsazeno = await prisma.gameTerritory.findUnique({ where: { okres_key: key } }).catch(() => null);
     if (obsazeno && obsazeno.id !== t.id) {
-      console.warn('[game] území', t.okres_key, '— buňka', key, 'už patří', obsazeno.master_nick);
+      // Dva sousední okresy spadly do jedné buňky a jeden z nich byl v převodu
+      // dřív. Druhý nemá kam — buňka je jen jedna a vzít ji tomu prvnímu by
+      // bylo horší než nechat tenhle řádek zaniknout.
+      await zrusNeprevedene(t, 'buňku ' + key + ' už drží ' + obsazeno.master_nick);
       continue;
     }
     await prisma.gameTerritory.update({ where: { id: t.id }, data: { okres_key: key } }).catch(() => {});

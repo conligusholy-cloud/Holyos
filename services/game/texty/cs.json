@@ -245,6 +245,8 @@
   "dor.unie_operator_vracen": "Vrácena operátorská licence v území {p1} od {p2} — {penize} zpátky.",
   "dor.unie_operator_zrusen": "Operátorská licence v území {p1} zrušena, vrátilo se ti {penize}.",
   "dor.unie_priplatek": "Zvýšený servisní poplatek v území {p1} ({p2}) — {penize:penize}",
+  "dor.unie_uzemi_zaniklo": "Území {p1} zaniklo při přechodu na síť území — buňku, ve které leží, drží někdo jiný. Licence se ti vrátila: {penize}.",
+  "dor.unie_uzemi_zaniklo_operator": "Území {p1} zaniklo a s ním i tvoje operátorská licence. Vrátilo se ti {penize}.",
   "dor.unie_uzemi_ziskano": "Získal jsi území {p1}.",
   "dor.unie_uzemi_ztraceno": "Přišel jsi o území {p1} — přeplatil tě {p2}.",
   "dor.unie_vyzva": "O tvoje území {p1} se uchází {p2} za {penize:penize}.",

@@ -182,6 +182,31 @@ ok('hra kreslí polygon', /L\.polygon\(u\.hranice, styl\)/.test(hra));
 ok('a bez hranice zůstane kruh', /L\.circle\(\[u\.lat, u\.lon\], Object\.assign\(\{ radius: UZEMI_R \}/.test(hra));
 ok('polygon se kreslí jen z pořádného obrysu', /u\.hranice\.length >= 4/.test(hra));
 
+// ─── Co se nepřevedlo ────────────────────────────────────────────────────────
+// Dva sousední okresy mohly spadnout do jedné buňky a jeden z nich byl
+// v převodu dřív. Druhému zůstal řádek s klíčem města místo buňky: bez obrysu
+// se nedal nakreslit, bez měst v něm nestál žádný prádlomat a nic nenesl —
+// a přesto po hráči chtěl rozvojový závazek a dal se o něj vyzvat.
+const O = cti('services/game/okresy.js');
+ok('neprevedené území se ruší, ne přeskakuje',
+  /async function zrusNeprevedene\(t, duvod\)/.test(O)
+  && !/console\.warn\('\[game\] území', t\.okres_key, '— nejde převést[\s\S]{0,60}continue;/.test(O));
+ok('ruší se, když se město nenašlo', /if \(!key\) \{\n      await zrusNeprevedene\(t, /.test(O));
+ok('i když buňku drží někdo jiný',
+  /obsazeno\.id !== t\.id\) \{[\s\S]{0,400}await zrusNeprevedene\(t, 'buňku '/.test(O));
+ok('a licence se hráči vrací',
+  /kind: 'cash',\n      amount: cena, spot_id: 'unie:zanik:' \+ t\.id/.test(O));
+ok('řádek území zmizí', /gameTerritory\.delete\(\{ where: \{ id: t\.id \} \}\)/.test(O));
+// Operátor si za licenci zaplatil masterovi — když území padne, nemá za co.
+ok('operátorská licence padá s územím a peníze se vrací',
+  /gameOperatorLicence\.updateMany|gameOperatorLicence\.update\(\{ where: \{ id: l\.id \}/.test(O)
+  && /spot_id: 'unie:zanik-lic:' \+ l\.id/.test(O));
+// Doručenka to musí umět říct, jinak hráči peníze jen tiše přibudou.
+const KAT = JSON.parse(cti('services/game/texty/cs.json'));
+ok('a hráč se ve zvonku doví proč',
+  !!KAT['dor.unie_uzemi_zaniklo'] && !!KAT['dor.unie_uzemi_zaniklo_operator']
+  && KAT['dor.unie_uzemi_zaniklo'].indexOf('{penize}') > 0);
+
 // ─── Licence ─────────────────────────────────────────────────────────────────
 // Území je víc než jedno město a nemá stát stejně. Volná místa zná hra jen
 // z té části, kterou někdo prozkoumal — počet obyvatel platí i pro zbytek.
