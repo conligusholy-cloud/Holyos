@@ -12510,11 +12510,16 @@ function loadAkcieSeznam(then) {
     if (then) then();
   }).catch(function () { AKCIE_SEZNAM = []; if (then) then(); });
 }
+// Když se server neozve, stará data se nezahazujou a volajícímu se řekne, že
+// to nevyšlo. Dřív se nastavilo null a obrazovka si o totéž řekla znovu —
+// z jednoho výpadku sítě se tak stala nekonečná smyčka požadavků a hráč
+// koukal na prázdno.
 function loadAkcieTrh(id, then) {
   api('/trade/akcie/' + id).then(function (r) {
-    AKCIE_TRH = (r.ok && r.j.akcie) || null;
-    if (then) then();
-  }).catch(function () { AKCIE_TRH = null; if (then) then(); });
+    var mam = !!(r.ok && r.j.akcie);
+    if (mam) AKCIE_TRH = r.j.akcie;
+    if (then) then(mam);
+  }).catch(function () { if (then) then(false); });
 }
 
 // Graf ceny: řada uzavřených obchodů. Cena akcie není nic jiného než to, co
@@ -12800,9 +12805,10 @@ function akcieBurzaSheet() {
 var AKCIE_BURZA = null;
 function loadAkcieBurza(id, then) {
   api('/trade/akcie/' + id + '/trh', { method: 'GET' }).then(function (r) {
-    AKCIE_BURZA = (r.ok && r.j.trh) || null;
-    if (then) then();
-  }).catch(function () { AKCIE_BURZA = null; if (then) then(); });
+    var mam = !!(r.ok && r.j.trh);
+    if (mam) AKCIE_BURZA = r.j.trh;
+    if (then) then(mam);
+  }).catch(function () { if (then) then(false); });
 }
 // Hloubka knihy. Nahoře nabídky (kdo prodává) od nejlevnější, dole poptávky
 // (kdo kupuje) od nejdražší — uprostřed je rozpětí, ve kterém se trh potkává.
@@ -12847,6 +12853,94 @@ function akcieHloubkaHtml(b) {
     + (pop.length ? pop.map(function (x) { return radek(x, 'ok', 'prodat'); }).join('')
         : '<p class="fine">' + esc(tx('akcie.poptavka_zadna')) + '</p>');
 }
+// ─── Kniha hned po mém příkazu ───────────────────────────────────────────────
+// Hráč zadá příkaz a kniha nad formulářem musí být v tu chvíli jiná: buď jeho
+// příkaz leží mezi ostatními, nebo o kusy, které si vzal, ubyla protistrana.
+// Dřív se čekalo, až doletí nový přehled ze serveru a obrazovka se překreslí.
+// Dokud nedoletěl, svítila stará kniha — a protože se potvrzení obchodu dává
+// jen do zvonku, vypadalo to, že se nestalo vůbec nic. Hráč příkaz zadal
+// znovu, nebo hru obnovil.
+//
+// Nic se tu nepočítá podruhé. Kolik se zobchodovalo a co zbylo leželo, říká
+// sám server ve své odpovědi; tady se to jen promítne do knihy. Kusy se
+// odebírají od nejlepší ceny dolů, protože přesně v tomhle pořadí se páruje.
+// Server pak totéž potvrdí celým přehledem.
+function akcieKnihaPo(b, p, odp) {
+  if (!b) return b;
+  var k = JSON.parse(JSON.stringify(b));
+  var smer = p.smer === 'prodat' ? 'prodat' : 'koupit';
+  var proti = smer === 'koupit' ? 'nabidka' : 'poptavka';
+  var moje = smer === 'koupit' ? 'poptavka' : 'nabidka';
+  var vzato = Math.max(0, Math.round(odp.zobchodovano || 0));
+  var castka = Math.max(0, Math.round(odp.castka || 0));
+  var zbyva = vzato;
+  k[proti] = (k[proti] || []).map(function (x) {
+    // Vlastní kusy na řádku se nepočítají: se sebou hráč neobchoduje.
+    var ubylo = Math.min(zbyva, Math.max(0, (x.pocet || 0) - (x.moje || 0)));
+    zbyva -= ubylo;
+    return Object.assign({}, x, { pocet: (x.pocet || 0) - ubylo });
+  }).filter(function (x) { return x.pocet > 0; });
+  var lezi = Math.max(0, Math.round(odp.zbyva || 0));
+  var cena = Math.max(0, Math.round(odp.cena || p.cena || 0));
+  if (lezi > 0) {
+    var radky = (k[moje] || []).slice();
+    var stejna = null;
+    radky.forEach(function (x) { if (x.cena === cena) stejna = x; });
+    if (stejna) { stejna.pocet += lezi; stejna.moje = (stejna.moje || 0) + lezi; }
+    else radky.push({ cena: cena, pocet: lezi, moje: lezi });
+    // Poptávka od nejvyšší ceny, nabídka od nejnižší — nahoře je vždycky to,
+    // co se zobchoduje jako první.
+    radky.sort(function (x, y) {
+      return moje === 'poptavka' ? y.cena - x.cena : x.cena - y.cena;
+    });
+    k[moje] = radky;
+    k.prikazy = (k.prikazy || []).concat([{ id: odp.prikaz_id || 0, smer: smer,
+      pocet: lezi, cena: cena, castka: cena * lezi, kdy: new Date().toISOString() }]);
+  }
+  // Co mi ubylo z volných peněz a kusů. Příkaz, který leží v knize, je slib:
+  // drží peníze (nákup) nebo kusy (prodej), dokud ho někdo nevezme.
+  if (smer === 'koupit') {
+    k.volna_hotovost = Math.max(0, (k.volna_hotovost || 0) - castka - cena * lezi);
+    k.moje_kusy = (k.moje_kusy || 0) + vzato;
+    k.volne_kusy = (k.volne_kusy || 0) + vzato;
+  } else {
+    k.volna_hotovost = (k.volna_hotovost || 0) + castka;
+    k.moje_kusy = Math.max(0, (k.moje_kusy || 0) - vzato);
+    k.volne_kusy = Math.max(0, (k.volne_kusy || 0) - vzato - lezi);
+    k.zamcene_kusy = (k.zamcene_kusy || 0) + lezi;
+  }
+  // Cena akcie je poslední uzavřený obchod a pásmo se hýbe s ní. Bez toho by
+  // nápověda pod políčkem chvíli měřila od ceny, která už neplatí.
+  if (odp.cena_po > 0) {
+    k.cena = Math.round(odp.cena_po);
+    var sirka = (k.pasmo_pct || 30) / 100;
+    k.mez = { min: Math.max(1, Math.round(k.cena * (1 - sirka))),
+      cena: k.cena, max: Math.round(k.cena * (1 + sirka)) };
+  }
+  return k;
+}
+// Zrušený příkaz zmizí z knihy stejně rychle, jak do ní přibyl.
+function akcieKnihaBez(b, pid) {
+  if (!b) return b;
+  var k = JSON.parse(JSON.stringify(b));
+  var muj = null;
+  (k.prikazy || []).forEach(function (x) { if (String(x.id) === String(pid)) muj = x; });
+  if (!muj) return k;
+  k.prikazy = (k.prikazy || []).filter(function (x) { return String(x.id) !== String(pid); });
+  var kde = muj.smer === 'koupit' ? 'poptavka' : 'nabidka';
+  k[kde] = (k[kde] || []).map(function (x) {
+    if (x.cena !== muj.cena) return x;
+    return Object.assign({}, x, { pocet: (x.pocet || 0) - muj.pocet,
+      moje: Math.max(0, (x.moje || 0) - muj.pocet) });
+  }).filter(function (x) { return x.pocet > 0; });
+  if (muj.smer === 'koupit') {
+    k.volna_hotovost = (k.volna_hotovost || 0) + muj.cena * muj.pocet;
+  } else {
+    k.volne_kusy = (k.volne_kusy || 0) + muj.pocet;
+    k.zamcene_kusy = Math.max(0, (k.zamcene_kusy || 0) - muj.pocet);
+  }
+  return k;
+}
 // Moje příkazy v knize. Zrušit se dá kdykoli, dokud do nich nikdo neprodá.
 function akciePrikazyHtml(b) {
   var l = b.prikazy || [];
@@ -12872,10 +12966,16 @@ function akciePrikazyHtml(b) {
 // smer jen předvyplní směr v příkazu; obrazovka je pořád jedna.
 function akcieTrhSheet(id, smer) {
   if (!AKCIE_TRH || AKCIE_TRH.aliance_id !== id) {
-    return loadAkcieTrh(id, function () { akcieTrhSheet(id, smer); });
+    return loadAkcieTrh(id, function (mam) {
+      if (mam) akcieTrhSheet(id, smer);
+      else toast(esc(tx('mapa.server_neodpovida_6')), 'err');
+    });
   }
   if (!AKCIE_BURZA || AKCIE_BURZA.aliance_id !== id) {
-    return loadAkcieBurza(id, function () { akcieTrhSheet(id, smer); });
+    return loadAkcieBurza(id, function (mam) {
+      if (mam) akcieTrhSheet(id, smer);
+      else toast(esc(tx('mapa.server_neodpovida_6')), 'err');
+    });
   }
   var a = AKCIE_TRH;
   var b = AKCIE_BURZA;
@@ -13060,6 +13160,12 @@ function akcieTrhSheet(id, smer) {
         doZvonku(r.j.zobchodovano
           ? tx('veta.akcie_zobchodovano', { p1: r.j.zobchodovano, p2: r.j.castka })
           : tx('veta.akcie_prikaz_lezi', { p1: r.j.zbyva, p2: r.j.cena }), 'ok', true);
+        // Kniha se přepíše hned z odpovědi serveru a teprve pak si hra řekne
+        // o celý přehled. Jinak hráč kouká na starou knihu a neví, jestli
+        // příkaz prošel — potvrzení je jen ve zvonku.
+        AKCIE_BURZA = akcieKnihaPo(AKCIE_BURZA, { smer: s, pocet: n, cena: c }, r.j);
+        if (AKCIE_TRH && r.j.cena_po > 0) AKCIE_TRH.cena = Math.round(r.j.cena_po);
+        akcieTrhSheet(id, smerTed);
         znovu();
       }).catch(function () { btn.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
   };
@@ -13086,6 +13192,8 @@ function akcieTrhSheet(id, smer) {
           t.disabled = false;
           if (!r.ok) return toast((r.j && r.j.error) || esc(tx('hra.nepovedlo_se_32')), 'err');
           doZvonku(tx('akcie.prikaz_zrusen'), 'ok');
+          AKCIE_BURZA = akcieKnihaBez(AKCIE_BURZA, t.getAttribute('data-ak-zrus'));
+          akcieTrhSheet(id, smerTed);
           znovu();
         }).catch(function () { t.disabled = false; toast(esc(tx('mapa.server_neodpovida_6')), 'err'); });
     };

@@ -498,6 +498,17 @@ if git diff --cached --name-only | grep -qE 'services/game/akcie|services/game/r
   fi
 fi
 
+# Živá kniha příkazů: co se zadá, musí být na obrazovce hned. Potvrzení jde
+# jen do zvonku, takže stará kniha nad formulářem znamená, že hráč zadá
+# příkaz podruhé nebo obnoví hru.
+if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|routes/game-trade'; then
+  if ! node nastroje/taknihaziva.js; then
+    echo ""
+    echo "STOP: živá kniha příkazů nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Co hráč vlastní mimo svou firmu: fond a podíly v karte majetku. Nejzrádnější
 # je znaménko — co z MÉ firmy drží jiní, se musí odečíst, ne přičíst.
 if git diff --cached --name-only | grep -qE 'public/compounder/game/game.js|routes/game-account'; then
