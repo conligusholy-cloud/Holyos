@@ -46,6 +46,75 @@ const KAMPANE = {
   kampan_sub10: { add: 0.10 }, kampan_sub15: { add: 0.15 }, kampan_sub25: { add: 0.25 },
 };
 
+// ─── Náhrada za karty nad strop ──────────────────────────────────────────────
+// Strop přišel později než karty. Kdo si jich koupil třicet, měl najednou
+// dvacet čtyři kusů, které nedělají nic — a ty nepoužité nejde ani použít.
+// Strop je správně (návštěvnost násobí tržbu celé sítě, takže jedna karta
+// rozhodila žebříček víc než sto prádlomatů), ale co si hráč zaplatil, mu
+// propadnout nesmí.
+//
+// Vrací se to, co za kartu dal, v herních penězích — ne to, co mu rozbitý
+// vzorec stačil vydělat. A přepočítává se nejlepším kurzem, jaký v obchodě
+// je: tohle není obchod, tohle je omluva.
+const NAD_STROP = 'strop';        // značka na kartě: započtena jako náhrada
+const KARTA_CENA_HAL = 9900;      // 99 Kč — cena trvalé kampaně v ceníku
+// Nejlepší kurz z ceníku hotovosti (haléře → laundry). Drží se tu jako číslo,
+// ať služba nemusí sahat do rout; musí sedět s CASH v game-account.routes.js.
+const KURZ_LAUNDRY_ZA_HALER = 23; // cash2000: 200 000 hal → 4 600 000 L$
+const NAHRADA_ZA_KARTU = Math.round(KARTA_CENA_HAL * KURZ_LAUNDRY_ZA_HALER);
+
+// Které karty hráči zemřely. Nejdřív nepoužité — ty jsou celé a hráč je
+// nikdy nespálil; teprve pak ty použité nad strop.
+function mrtveKarty(pouzite, nepouzite) {
+  const zive = Math.min(BOOST_KARET_MAX, pouzite.length);
+  const mrtvePouzite = pouzite.slice(zive);
+  return nepouzite.concat(mrtvePouzite).slice(0,
+    Math.max(0, pouzite.length + nepouzite.length - BOOST_KARET_MAX));
+}
+
+let NAHRAZENO = false;
+async function nahradKartyNadStrop() {
+  if (NAHRAZENO) return 0;
+  NAHRAZENO = true;
+  const vse = await prisma.gameCard.findMany({
+    where: { kind: 'traffic', NOT: { used_on: NAD_STROP } },
+    select: { id: true, player_id: true, used_at: true },
+    orderBy: { id: 'asc' },
+  }).catch(() => []);
+  const dle = new Map();
+  vse.forEach((c) => {
+    if (!dle.has(c.player_id)) dle.set(c.player_id, { pouzite: [], nepouzite: [] });
+    (c.used_at ? dle.get(c.player_id).pouzite : dle.get(c.player_id).nepouzite).push(c);
+  });
+  let kolik = 0;
+  for (const [playerId, k] of dle) {
+    const mrtve = mrtveKarty(k.pouzite, k.nepouzite);
+    if (!mrtve.length) continue;
+    const castka = NAHRADA_ZA_KARTU * mrtve.length;
+    // Značka a zároveň zámek: nepoužitá karta se tím zavře, ať ji hráč
+    // nepoužije podruhé a nechce náhradu dvakrát.
+    await prisma.gameCard.updateMany({ where: { id: { in: mrtve.map((c) => c.id) } },
+      data: { used_on: NAD_STROP, used_at: new Date() } }).catch(() => {});
+    await prisma.gameDelivery.create({ data: { player_id: playerId, kind: 'cash',
+      amount: castka, spot_id: 'karta:strop:' + mrtve[mrtve.length - 1].id,
+      text_kod: 'dor.karta_nad_strop',
+      text_data: { p1: mrtve.length, p2: BOOST_KARET_MAX, penize: castka },
+      popis: 'Náhrada za trvalé kampaně nad strop (' + mrtve.length + ' ks)' } }).catch(() => {});
+    kolik += mrtve.length;
+  }
+  if (kolik) console.log('[game] náhrada za trvalé kampaně nad strop, karet:', kolik);
+  return kolik;
+}
+// Na čtecí cestě se na to nečeká: sahá to na všechny karty a běží to stejně
+// jen jednou.
+function nahradaNaPozadi() {
+  if (NAHRAZENO) return false;
+  Promise.resolve().then(nahradKartyNadStrop).catch((e) => {
+    console.warn('[game] náhrada za kampaně selhala:', e && e.message);
+  });
+  return true;
+}
+
 function povest(st) {
   return Math.max(-100, Math.min(100, Number((st || {}).povest) || 0));
 }
@@ -75,8 +144,11 @@ async function proHrace(hrac, st, t) {
     : 0;
 
   // Trvalý boost: každá zahozená karta na návštěvnost přidala svůj díl.
+  // Karty nad strop se nepočítají — hráč za ně dostal náhradu a počítat je
+  // znovu by znamenalo, že má obojí.
   const karet = await prisma.gameCard.count({
-    where: { player_id: hrac.id, kind: 'traffic', used_at: { not: null } },
+    where: { player_id: hrac.id, kind: 'traffic', used_at: { not: null },
+      NOT: { used_on: NAD_STROP } },
   }).catch(() => 0);
   const boost = Math.min(BOOST_MAX, karet * BOOST_ZA_KARTU);
 
@@ -123,5 +195,6 @@ async function proHrace(hrac, st, t) {
 }
 
 module.exports = { spocti, povestKoef, povest, proHrace,
+  mrtveKarty, nahradKartyNadStrop, nahradaNaPozadi, NAD_STROP, NAHRADA_ZA_KARTU,
   TRAFFIC_BASE, TRAFFIC_PER_REF, TRAFFIC_MAX, POVEST_DOLU, POVEST_NAHORU,
   REF_MAX, BOOST_ZA_KARTU, BOOST_KARET_MAX, BOOST_MAX, KAMPANE };

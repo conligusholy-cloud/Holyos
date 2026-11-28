@@ -1873,6 +1873,9 @@ function rushZdarmaZa(p) {
 // GET /cards → katalog + co hráč vlastní
 router.get('/cards', async (req, res, next) => {
   try {
+    // Karty nad strop se jednou proplatí a zavřou. Běží to na pozadí: sahá to
+    // na všechny karty a hráč na to nemá proč čekat.
+    require('../services/game/navstevnost').nahradaNaPozadi();
     let p = await currentPlayer(req);
     if (p) {
       try { p = await dosypExpresniDovoz(p) || p; }
@@ -1926,8 +1929,12 @@ router.post('/cards/use', requirePlayer, async (req, res, next) => {
     // to by hráč právem bral jako okradení, tak ji radši nepustíme použít.
     if (kind === 'traffic') {
       const NAV = require('../services/game/navstevnost');
+
+      // Karty nad strop se nepočítají — hráč za ně dostal náhradu a znovu
+      // je nasčítat by znamenalo, že má obojí.
       const uz = await prisma.gameCard.count({
-        where: { player_id: req.player.id, kind: 'traffic', used_at: { not: null } } });
+        where: { player_id: req.player.id, kind: 'traffic', used_at: { not: null },
+          NOT: { used_on: NAV.NAD_STROP } } });
       if (uz >= NAV.BOOST_KARET_MAX) {
         return res.status(409).json({ error: stx(req)('server.kampani_uz_mas_strop',
           { p1: NAV.BOOST_KARET_MAX }) });

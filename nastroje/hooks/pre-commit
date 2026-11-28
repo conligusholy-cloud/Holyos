@@ -498,6 +498,17 @@ if git diff --cached --name-only | grep -qE 'services/game/akcie|services/game/r
   fi
 fi
 
+# Náhrada za trvalé kampaně nad strop. Jsou to peníze, které si hráči
+# zaplatili doopravdy — a mrtvá karta nesmí dál počítat do boostu, jinak má
+# hráč náhradu i efekt.
+if git diff --cached --name-only | grep -qE 'services/game/navstevnost|routes/game-account'; then
+  if ! node nastroje/tkampanstrop.js; then
+    echo ""
+    echo "STOP: náhrada za kampaně nad strop nesedí (viz výš)."
+    exit 1
+  fi
+fi
+
 # Živá kniha příkazů: co se zadá, musí být na obrazovce hned. Potvrzení jde
 # jen do zvonku, takže stará kniha nad formulářem znamená, že hráč zadá
 # příkaz podruhé nebo obnoví hru.
