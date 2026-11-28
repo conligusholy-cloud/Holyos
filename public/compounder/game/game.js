@@ -9544,19 +9544,41 @@ function cetaSheet() {
   };
 }
 // Výběr města pro pobočku — jen z toho, co hráč prozkoumal.
+// Hledání v seznamu měst. Píše se bez háčků a bez ohledu na velikost písmen;
+// azbuka ani japonština se nijak neupravují, tam stačí porovnat, jak to hráč
+// napsal.
+function bezHacku(x) {
+  return String(x == null ? '' : x).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
 function pobockaSheet() {
+  // Odkud se měří: od sídla, a dokud není, od první základny. Hráč se stovkou
+  // prozkoumaných měst po celém světě potřebuje nejdřív vidět ta svoje.
+  var odkud = S.sidlo || zakladny()[0] || null;
   var mesta = Object.keys(S.areas || {}).map(function (id) {
     var a = S.areas[id], str = stredOblasti(a);
     if (!str) return null;
     var uz = zakladny().some(function (b) { return kmMezi(b, str) < 8; });
-    return { id: id, name: a.name || id, lat: str.lat, lon: str.lon, uz: uz };
+    return { id: id, name: a.name || id, lat: str.lat, lon: str.lon, uz: uz,
+      km: odkud ? kmMezi(odkud, str) : null };
   }).filter(Boolean);
+  // Nejbližší nahoře. Seznam seřazený tak, jak města přibývala, byl u stovky
+  // měst v azbuce a japonštině k nepoužití — hráč v něm nenašel ani město,
+  // ve kterém bydlí.
+  mesta.sort(function (x, y) {
+    if (x.km == null || y.km == null) return 0;
+    return x.km - y.km;
+  });
   sheet(tx('veta.h3_h3_p_class_muted_small_14', { p1: esc(tx('hra.zridit_pobocku')), p2: kcFull(POBOCKA_CENA), p3: kcFull(POBOCKA_MESICNE) })
     + (S.cash < POBOCKA_CENA ? tx('hra.p_class_fine_err_na_pobocku', { p1: kcFull(POBOCKA_CENA - S.cash) }) : '')
     + (mesta.length
-      ? '<div class="zeb">' + mesta.map(function (m) {
-          return '<div class="zeb-row"><span class="nick">' + esc(m.name)
-            + '<i>' + (m.uz ? esc(tx('hra.tady_uz_zakladnu_mas')) : esc(tx('hra.prozkoumane_mesto'))) + '</i></span>'
+      ? '<input id="pob-hledat" class="inp" type="search" autocomplete="off"'
+        + ' placeholder="' + esc(tx('hra.pobocka_najdi_mesto')) + '" style="width:100%;margin:8px 0 4px">'
+        + '<p class="fine" id="pob-nic" style="display:none">' + esc(tx('hra.pobocka_nic_nenaslo')) + '</p>'
+        + '<div class="zeb" id="pob-seznam">' + mesta.map(function (m) {
+          return '<div class="zeb-row" data-hledat="' + esc(bezHacku(m.name)) + '">'
+            + '<span class="nick">' + esc(m.name)
+            + '<i>' + (m.uz ? esc(tx('hra.tady_uz_zakladnu_mas')) : esc(tx('hra.prozkoumane_mesto')))
+            + (m.km == null ? '' : ' · ' + cislo1(Math.round(m.km)) + ' km') + '</i></span>'
             // Bez peněz tlačítko nemizí, jen zešedne. Když se schovalo úplně,
             // vypadal seznam měst jako výpis bez jediné akce a hráč hledal,
             // kde se pobočka vlastně zřizuje — chybějící částka je nad ním.
@@ -9566,6 +9588,20 @@ function pobockaSheet() {
             + '</div>';
         }).join('') + '</div>'
       : '<div class="empty">' + esc(tx('hra.nemas_prozkoumane_zadne_mesto')) + '</div>'));
+  // Hledá se skrýváním řádků, ne překreslením: tlačítka tak zůstanou
+  // napojená a hráči nepropadne psaní uprostřed slova.
+  var hl = $('pob-hledat');
+  if (hl) hl.oninput = function () {
+    var co = bezHacku(hl.value).trim();
+    var videt = 0;
+    [].forEach.call(document.querySelectorAll('#pob-seznam .zeb-row'), function (r) {
+      var sedi = !co || (r.getAttribute('data-hledat') || '').indexOf(co) >= 0;
+      r.style.display = sedi ? '' : 'none';
+      if (sedi) videt++;
+    });
+    var nic = $('pob-nic');
+    if (nic) nic.style.display = videt ? 'none' : '';
+  };
   [].forEach.call(document.querySelectorAll('[data-pob]'), function (b) {
     b.onclick = function () {
       var m = mesta.filter(function (x) { return x.id === b.getAttribute('data-pob'); })[0];
